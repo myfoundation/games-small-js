@@ -7,8 +7,12 @@ Snake
 
 
 ## Live Demo
-Test Pages are here :  
+Play here :  
  [https://steamclub.net/scene/games/](https://steamclub.net/scene/games/)
+
+## Sources
+ [https://github.com/myfoundation/games-small-js](https://github.com/myfoundation/games-small-js)
+
 
 
 
