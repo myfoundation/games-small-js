@@ -1,0 +1,491 @@
+<html>
+<head>
+
+<title>Minesweeper Micro Engine N-D board ready (c) MasterMentor 2019</title>
+<meta charset='utf-8'>
+<script type='text/javascript' src='underscore.js'></script>
+<script type='text/javascript' src='ramda.js'></script>
+<script type='text/javascript' src='jsont.js'></script>
+<script type='text/javascript' src='jquery-3.3.1.js'></script>
+
+<style>
+.gametable
+{
+	border-collapse: collapse;
+}
+.cell
+{
+	width: 20px;
+	height: 20px;
+	border: 1px solid black;
+    text-align: center; 
+    vertical-align: middle;
+}
+</style>
+
+</head>
+<body onload=start()>
+<h1>Minesweeper N-D</h1>
+
+Heigth= <input type=text id=G size=5 maxlength=5 value=20><br>
+Width=  <input type=text id=V size=5 maxlength=5 value=20><br>
+Mines=  <input type=text id=M size=5 maxlength=5 value=40><br>
+
+Closed: <span id=cells_closed></span><br>
+<button onclick=start()>Start</button>
+<br><br>
+
+	<div id=matrix2d></div><br>
+	<div id=game_state></div>
+
+<br><br>
+This Minesweeper is N-Dimension board play ready.
+<br>
+Change matrix2d() function, and play Minesweeper at 3-D, 4-D ect. board.
+<br>
+This job made for fun and childs teaching.
+<script>
+
+//------------------------------------------
+// CONSTANTS
+//------------------------------------------
+var	C_BOMB			= 'B',
+	C_BOOMBOMB		= 'D',
+	C_NO_OPEN_AREA	= -1
+	
+	C_GAME_START	= 'C_GAME_START',
+	C_GAME_WIN		= 'C_GAME_WIN',
+	C_GAME_LOOSE	= 'C_GAME_LOOSE',
+	C_GAME_LOOSE1	= 'C_GAME_LOOSE1'
+;
+
+var IMAGES =
+{
+	C_GAME_START	: '',
+	C_GAME_WIN		: 'You lucky!<br><br><img src="im/win.png" alt="">',
+	C_GAME_LOOSE	: 'Booom!<br><br><img src="im/boom.jpg" alt="">',
+	C_GAME_LOOSE1	: 'Booom!<br><br><img src="im/boom1.png" alt="">',
+};
+
+// RUNTIME STRUCTURES STORAGE
+var _d =
+{
+	GAME_STATE		: null,
+
+	LAYERS_CELLS	: null,
+	OPEN_CELLS_RANGES		: null,
+	GxV_text		: null,
+	MINES_COUNT		: 0,
+};
+
+//------------------------------------------
+
+// DO IDs LIKE GV_1x2x3...
+function GV_text(GV) { return 'GV_' + GV.join('x'); }
+// JUST HELPERS
+function arr_fill(count, value) { return _.times(count, function(c) { return R.clone(value); }); }
+function LOG() { console.log.apply(console, arguments); }
+
+//------------------------------------------
+// COMBINATORICS
+//------------------------------------------
+// cartesianProduct([1, 2], [3, 4], ['a', 'b']);
+// [[1,3,"a"],[1,3,"b"],[1,4,"a"],[1,4,"b"],[2,3,"a"],[2,3,"b"],[2,4,"a"],[2,4,"b"]]
+function cartesianProduct()
+{
+	return _.reduce(arguments, function(a, b)
+	{
+		return _.flatten(_.map(a, function(x)
+		{
+			return _.map(b, function(y)
+			{
+				return x.concat([y]);
+			});
+		}), true);
+	}, [ [] ]);
+}
+//------------------------------------------
+
+/**
+GENERATING SQUARE-LIKE MATHSET (SHAPE) AROUND CELL
+*/
+function gen_square(GV)
+{
+	/*
+	// 2-D EXPLAIN SAMPLE:
+	// IN 2-D YOU MAY GET SQUARE BY THIS ALGORITHM
+	// IN N-D - THE SAME WAY
+	var G = GV[0], V = GV[1];
+	return [
+		GV_text([G-1, V-1]), GV_text([G, V-1]), GV_text([G+1, V-1]),
+		GV_text([G-1, V  ]), GV_text([G, V  ]), GV_text([G+1, V  ]),
+		GV_text([G-1, V+1]), GV_text([G, V+1]), GV_text([G+1, V+1]),
+	];
+	*/
+
+	// YOU MAY DEFINE ANY ORDER OF "SQUARE" CELLS IN MATHSET
+	// BECAUSE IT'S NOT IMPORTANT FOR GAME (MATHSETS) ALORITHMS
+	// HERE THE "CENTER" CELL OF "SQUARE" PLACED AT POSITION 0
+	var ret = _.map(GV, function(xxx) {	return [xxx, xxx - 1, xxx + 1];	});
+	ret = cartesianProduct.apply(null, ret);
+	ret = _.map(ret, function(GV) { return GV_text(GV); });
+	return ret;
+}
+
+/**
+GENERATING HTML 2-D TABLE TEMPLATE
+*/
+function matrix2d(GxV_text, GnVn)
+{
+	var G_lines = _.chunk(GxV_text, GnVn[1]);
+	return jsonT(G_lines,
+	{
+		'self':			'<table class=gametable>{$}</table>',
+	 	'self[*]':		'<tr>{$}</tr>',
+	 	'self[*][*]':	'<td class=cell id={$} onclick=click_gateway("{$}")><b><%={$}%></b></td>',
+	});
+}
+
+
+/**
+GO BY LAYERS PIE AND APPLY DATA FROM LAYERS TO EVERY CELL
+*/
+function render()
+{
+	// CREATING MATRIX WITH DATA FOR HTML TABLE TEMPLATE
+	var matrix_layer = _.object(_d.GxV_text, arr_fill(_d.GxV_text.length, null));;
+	_.some(matrix_layer, function(v,GV,layer)
+	{
+		var tmp = _d.LAYERS_CELLS['NUMBERS'][GV];
+		if(tmp) layer[GV] = '' + tmp;
+		
+		tmp = _d.LAYERS_CELLS['MINES'][GV];
+		if(tmp) layer[GV] = tmp;
+
+		tmp = _d.LAYERS_CELLS['TOP_LAYER'][GV];
+		if(!tmp) layer[GV] = '?'; //GV;
+	});
+
+	var closed_cells = 0;
+	_.some(_d.LAYERS_CELLS['TOP_LAYER'], function(v) { if(!v) closed_cells++; });
+
+	// RENDER TABLE
+	$('[id=matrix2d]').html(matrix2d_(matrix_layer));
+	$('[id=game_state]').html(IMAGES[_d.GAME_STATE]);
+	$('[id=cells_closed]').html(closed_cells);
+}
+
+/*
+FILL LAYER CELLS BY GIVEN GV SET
+*/
+function fill_layer(layer, GV_set, value)
+{
+	_.some(GV_set, function(GV)
+	{
+		layer[GV] = value;
+	});
+}
+
+function start()
+{
+	// GLOBAL
+	_d.GAME_STATE		= C_GAME_START;
+	
+	var 
+		G = parseInt($('[id=G]').val()),
+		V = parseInt($('[id=V]').val()),
+		M = parseInt($('[id=M]').val()),
+		M = Math.min(G*V, M);
+	
+	_d.MINES_COUNT = M;
+	
+	//------------------------------------------
+	// DO N-D MATRIX AND MATRIX FLAT MATCH
+	//------------------------------------------
+	// DO PLAYBOARD RANGES
+	/*
+	[
+		0, 1, 2, ..., G
+		0, 1, 2, ..., V
+		0, 1, 2, ..., Z
+		...
+	*/
+	var GnVn = [G, V];
+	var GxV_range =  _.map(GnVn, function(N) { return _.range(0, N, 1); });
+
+	// DO PLAYBOARD N-D MATRIX (LIKE CHESSBOARD)
+	var GxV = cartesianProduct.apply(null, GxV_range);
+	
+	// FLAT MATCH MATRIX
+	// MAP N-D SPACE "POINT" (CELL OR CONTAINER) TO 1-D SPACE "POINT" (CELL OR CONTAINER)
+	// THIS FOLD N-D OBJECT TO FLAT MATRIX, SO N-D GOODBYE!
+	// FROM THIS PLACE WE DON'T KNOW ANY ABOUT DIMENSIONS (OR SHAPES), SO MATHSETS - I.E. RANGES - WELCOME!
+	_d.GxV_text = _.map(GxV, function(GV) { return GV_text(GV); });
+	//------------------------------------------
+	
+	//------------------------------------------
+	// DO LAYERS OF PLAYBOARD
+	//------------------------------------------
+	var layers = ['MINES', 'NUMBERS', 'ZERO_AREAS', 'TOP_LAYER'];
+	var layers_inits = [null, 0, C_NO_OPEN_AREA, null];
+	_d.LAYERS_CELLS = _.object(layers, _.map(layers, function(v, k) { return _.object(_d.GxV_text, arr_fill(_d.GxV_text.length, layers_inits[k])); }));
+
+	//------------------------------------------
+	// DO SQUARES-LIKE MATHSET AROUND ALL CELLS (ANY CELL)
+	//------------------------------------------
+	var squares_areas = _.map(GxV, function(GV) { return gen_square(GV); });
+	// CUT NOT EXISTS, BUT GENERATED BY gen_square() CELLS
+	squares_areas = _.map(squares_areas, function(area)
+	{	
+		return _.filter(area, function(GV)
+			{ return !_.isUndefined(_d.LAYERS_CELLS['TOP_LAYER'][GV]); });
+	});
+	// DO MATCH MAP [CELL -> IT'S "SQUARE AREA"]
+	var KV_gv_squares_area = _.object(_d.GxV_text, squares_areas);
+	//------------------------------------------
+	
+	//------------------------------------------
+	// GENERATE AND SET MINES AT MINE LAYER
+	//------------------------------------------
+	// "SHAKE" BOX WITH CELLS AND GET M CELLS
+	var mines = _.shuffle(R.clone(_d.GxV_text));
+	mines.length = M;
+	fill_layer(_d.LAYERS_CELLS['MINES'], mines, C_BOMB);
+	//------------------------------------------
+
+	//------------------------------------------
+	// GENERATE LAYER WITH NUMBERS IN CELLS
+	//------------------------------------------
+	_.some(_d.LAYERS_CELLS['NUMBERS'], function(v, GV, l)
+	{	
+		// PUT THE (STICK) 1 TO "NUMBERS" LAYER CELLS, IF THE BOMB IN "SQUARED" AREA
+		if(_d.LAYERS_CELLS['MINES'][GV] == C_BOMB)
+		{
+			// PUT 1 TO EACH CELL IN "SQUARE" AREA
+			// INTERSECTED "SQUARE" CELL WILL BE CHANGING AS I, II, III, ...
+			_.some(KV_gv_squares_area[GV], function(v)
+			{
+				l[v]++;
+			});
+		}
+	});
+	//------------------------------------------
+
+// =======================================================================
+// TECHNIQUE N1: MATH (GEOMETRICAL) OPEN AREAS RANGES CALCULATION
+// =======================================================================
+//
+// CALCULATE OPEN AREAS MATHSETS BY RANGES INTERSECTION
+// SLOWER AND A LITTLE BIT MORE CODE, BUT MORE UNIVERSAL ALGORITHM
+// IDEA: FIND INTERSECTION WITH ALL MATHSETS IN FULLSET (ORDER NOT IMPORTANT),
+// AND UNITE MATHSETS WHICH INTERSECED
+// SO... SOME MATHSETS "EAT" ANOTHERS MATHSETS AND GROWING
+// I LOVE THIS ONE, BUT SPEED...
+//
+// UNCOMMENT/COMMENT TECHNIQUE N1 / N2 TO TRY ONE
+
+	//------------------------------------------
+	// CALCULATE OPEN AREAS RANGES
+	//------------------------------------------
+	// GET AREAS WITH ZERO CELLS IN CENTER
+	var zero_cells_and_its_areas = _.filter(KV_gv_squares_area, function(area, GV)
+	{
+		return (_d.LAYERS_CELLS['NUMBERS'][GV] == 0);
+	});
+	// CUT MINES CELLS FROM AREA CELLS RANGE
+	_d.OPEN_CELLS_RANGES = _.map(zero_cells_and_its_areas, function(area)
+	{	
+		return _.filter(area, function(GV)
+			{ return !(_d.LAYERS_CELLS['MINES'][GV] == C_BOMB);	});
+	});
+	// DO RANGES WITH ONLY ZERO CELLS FOR GLUE ZERO CELLS AREAS RANGES
+	var zero_cells_ranges = _.map(_d.OPEN_CELLS_RANGES, function(area)
+	{	
+		return _.filter(area, function(GV)
+			{ return (_d.LAYERS_CELLS['NUMBERS'][GV] == 0); });
+	});
+	
+	//------------------------------------------
+	// GLUE ZERO CELLS AREAS RANGES
+	//------------------------------------------
+	// SIMPLY AND SLOW ALGORITHM, OPTIMIZATION NEED
+	// GO BY ALL EMPTY CELLS RANGES AND UNITE INTERSECTED
+	// 1. GO BY ALL COMBINATION OF FULLSET (UNITS) RANGES AND COMBINE RANGES TOGETHER IN ANY PIECES OF RANGES IS EQUALS
+	// 2. IF ANY COMBINATION MORPHISM DO, REPEAT STEP 1
+	// 3. FINISH: IF GO END REACHED AND NOT ANY COMBINATION MORPHISM MADE
+	
+	var indexes = _.range(0, zero_cells_ranges.length, 1);
+	var for_check = cartesianProduct(indexes, indexes);
+	
+	// "SHAKE" FOR GET RANDOM ORDER (I.E. UNIFORM DISTRIBUTION) FOR SPEEDUP CALCULATIONS
+	for_check = _.shuffle(for_check);
+	while(true)
+	{
+		var recheck = false;
+		
+		_.some(for_check, function(index_index)
+		{
+			var i_0 = index_index[0], i_1 = index_index[1];
+			
+			if(	(i_0 == i_1) ||
+				!zero_cells_ranges[i_0].length ||
+				!zero_cells_ranges[i_1].length) return;
+			
+			if(_.intersection(zero_cells_ranges[i_0], zero_cells_ranges[i_1]).length > 0)
+			{
+				// DO NEW RANGE (MATHSET) UNIT
+				zero_cells_ranges[i_0] = _.union(zero_cells_ranges[i_0], zero_cells_ranges[i_1]);
+				zero_cells_ranges[i_1] = [];
+
+				// IF EMPTY CELLS RANGES INTERSECTED, UNITE THEIR LINKED "SQUARE" RANGES
+				_d.OPEN_CELLS_RANGES[i_0] = _.union(_d.OPEN_CELLS_RANGES[i_0], _d.OPEN_CELLS_RANGES[i_1]);
+				_d.OPEN_CELLS_RANGES[i_1] = [];
+
+				// RANGES CHANGED, SO, FULL RECHECK
+				recheck = true;
+			}
+		});
+		
+		if(!recheck) break;
+	}
+// =======================================================================
+
+// =======================================================================
+// TECHNIQUE N2: ALGORITHMICS OPEN AREAS RANGES CALCULATION
+// =======================================================================
+//
+// FASTER AND SMALLER CODE, BUT SPECIFIC FOR "MINESWEEPER" ALGORITHM (SO... LES UNIVERSAL)
+// IDEA: YOU GO BY ALL CELLS AND EXPLORE SQUARE MATHSET AROUND EMPTY CELL,
+// IF ANOTHER EMPTY CELLS IN "SQUARE" FOUND, YOU APPEND THEIR SQUARES TO MATHSET FOR EXPLORATION
+// SO... DETECTED EMPTY EXPLORING AREA GROWING
+//
+// UNCOMMENT/COMMENT TECHNIQUE N1 / N2 TO TRY ONE
+
+/*
+	//------------------------------------------
+	// CALCULATE OPEN AREAS RANGES
+	//------------------------------------------
+	var zero_cells_ranges = [];
+	var processed = {};
+	// GO BY ALL CELLS
+	_.some(_d.LAYERS_CELLS['NUMBERS'], function(v, GV_, l)
+	{
+		var zero_cells_range = [];
+		
+		// CHECK RANGE HERE
+		var explore_range_container = [GV_];
+		
+		while(explore_range_container.length > 0)
+		{
+			var GV = explore_range_container.pop();
+			if(!processed[GV])
+			{
+				processed[GV] = GV;
+				
+				// IF ZERO CELL
+				if(!(_d.LAYERS_CELLS['MINES'][GV] == C_BOMB) && 
+					(_d.LAYERS_CELLS['NUMBERS'][GV] == 0))
+				{
+					// APPEND CELL TO RANGE
+					zero_cells_range.push(GV);
+					// APPEND SQUARE AREA AROUND CELL TO ANALYSIS
+					explore_range_container = _.union(explore_range_container, KV_gv_squares_area[GV]);
+				}
+			}
+		}
+		
+		if(zero_cells_range.length) zero_cells_ranges.push(zero_cells_range);
+	});
+	_d.OPEN_CELLS_RANGES = _.map(zero_cells_ranges, function(area)
+	{	
+		var flatten_area = _.flatten(_.map(area, function(GV) { return KV_gv_squares_area[GV]; }));
+		return _.filter(flatten_area, function(GV) { return !(_d.LAYERS_CELLS['MINES'][GV] == C_BOMB); });
+	});
+*/
+
+// =======================================================================
+
+	//------------------------------------------
+	// DO MATCH MAP [ZERO CELL-> RANGE FOR OPEN]
+	//------------------------------------------
+	_.some(zero_cells_ranges, function(area, area_index)
+	{
+		fill_layer(_d.LAYERS_CELLS['ZERO_AREAS'], area, area_index);
+	});
+	
+	// LINK DATA MAP AND HTML TEMPLATE
+	matrix2d_ = _.template(matrix2d(_d.GxV_text, GnVn));
+	render();
+}
+
+/**
+ONCLICK ENTRY
+*/
+function click_gateway(GV)
+{
+	// DON'T CHANGE ORDER
+	
+	// 1.
+	if(_d.GAME_STATE != C_GAME_START) return;
+	
+	// DO OPEN CLICKED CELL
+	_d.LAYERS_CELLS['TOP_LAYER'][GV] = true;
+	
+	// 2. GAME LOGIC (DETECT BOOM!)
+	if(_d.LAYERS_CELLS['MINES'][GV] == C_BOMB)
+	{
+		_d.LAYERS_CELLS['MINES'][GV] = C_BOOMBOMB;
+		_d.GAME_STATE = C_GAME_LOOSE;
+	}
+
+	// 3.
+	// IF ZERO-CELL CLICKED, OPEN LINKED OPEN CELLS RANGE
+	var area_ndx = _d.LAYERS_CELLS['ZERO_AREAS'][GV];
+	if(area_ndx != C_NO_OPEN_AREA)
+	{
+		fill_layer(_d.LAYERS_CELLS['TOP_LAYER'], _d.OPEN_CELLS_RANGES[area_ndx], true);
+	}
+	
+	// 4.
+	// CLOSED CELLS CALCULATOR
+	var closed_cells = 0;
+	_.some(_d.LAYERS_CELLS['TOP_LAYER'], function(v) { if(!v) closed_cells++; });
+	
+	// 5.
+	// DETECTING IS WIN
+	if((closed_cells == _d.MINES_COUNT) && 
+		!(_d.GAME_STATE == C_GAME_LOOSE)) _d.GAME_STATE = C_GAME_WIN;
+	//------------------------------------------
+
+	// 6.
+	// OPEN FULL AREA IF THE GAME END
+	if(_d.GAME_STATE != C_GAME_START)
+	{
+		fill_layer(_d.LAYERS_CELLS['TOP_LAYER'], _d.GxV_text, true);
+	}
+	
+	// 7.
+	// SOME CODELINES BY CHILD'S REQUIREMENTS FOR GET MORE FUN IN GAME
+	if(_d.GAME_STATE == C_GAME_LOOSE) _d.GAME_STATE = (parseInt(Math.random() * 100) %2) ? C_GAME_LOOSE:C_GAME_LOOSE1;
+
+	render();
+}
+
+
+//------------------------------------------
+// THIS IS COMPETITION
+//------------------------------------------
+// WRITE AND MINIFY YOUR ORIGINAL ALGORITHM OF CLASSIC MINESWEEPER
+// THE SMALLEST CODE WIN
+// 
+// MINIFY ONLINE
+// https://skalman.github.io/UglifyJS-online/
+// MINIFYER
+// https://github.com/mishoo/UglifyJS2
+// http://lisperator.net/uglifyjs/
+//------------------------------------------
+
+</script>
+	
+</body>
+</html>

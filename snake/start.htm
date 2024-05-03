@@ -1,0 +1,532 @@
+<html>
+<head>
+
+<title>Finite-state automata (FSA) Snake Engine N-D board ready (c) MasterMentor 2019</title>
+<meta charset='utf-8'>
+<script type='text/javascript' src='underscore.js'></script>
+<script type='text/javascript' src='ramda.js'></script>
+<script type='text/javascript' src='jsont.js'></script>
+<script type='text/javascript' src='jquery-3.3.1.js'></script>
+<script type='text/javascript' src='keymaster.js'></script>
+
+<style>
+.gametable
+{
+	border-collapse: collapse;
+}
+.cell
+{
+	width: 20px;
+	height: 20px;
+	border: 1px solid black;
+    text-align: center; 
+    vertical-align: middle;
+}
+</style>
+
+</head>
+<body onload=start()>
+<h1>Finite-state automata Snake N-D</h1>
+
+Heigth= <input type=text id=N1 size=5 maxlength=5 value=20><br>
+Width=  <input type=text id=N2 size=5 maxlength=5 value=20><br>
+Apples=  <input type=text id=M size=5 maxlength=5 value=5><br>
+Game moves: <span id=moves_count></span><br>
+Eaten apples: <span id=eaten_apples></span><br>
+Snake length: <span id=snake_length></span><br>
+
+<button onclick=start()>Start / Stop</button>
+<br><br>
+
+	<div id=matrix2d></div><br>
+	<div id=game_state></div><br><br>
+	FSA No 1 State<br>
+	<div id=matrix_fsa1></div>
+&nbsp;&nbsp;^<br>
+Snake head
+<br><br>
+This Snake Game is Finite-state automata (FSA) N-Dimension board play ready.
+<br>
+Change matrix2d() function, and play Snake Game at 3-D, 4-D ect. board.
+<br>
+This job made for fun and childs teaching.
+<script>
+
+
+//------------------------------------------
+// MATH LIBRARY
+//------------------------------------------
+// DO IDs LIKE x1x2x3...
+function NxNx_text(NxNx) { return 'x' + NxNx.join('x'); }
+function NxNx_text_array(GV_array) { return _.map(GV_array, function(NxNx) { return NxNx_text(NxNx); }) }
+function text_NxNx(NxNx) { return NxNx.split('x'); }
+function text_array_NxNx(GV_array) { return _.map(GV_array, function(NxNx) { return text_NxNx(NxNx); }) }
+
+// JUST HELPERS
+function arr_fill(count, value) { return _.times(count, function(c) { return R.clone(value); }); }
+function LOG() { console.log.apply(console, arguments); }
+function LEN(x) { return x.length; }
+
+//------------------------------------------
+// COMBINATORICS
+//------------------------------------------
+// cartesianProduct([1, 2], [3, 4], ['a', 'b']);
+// [[1,3,"a"],[1,3,"b"],[1,4,"a"],[1,4,"b"],[2,3,"a"],[2,3,"b"],[2,4,"a"],[2,4,"b"]]
+function cartesianProduct()
+{
+	return _.reduce(arguments, function(a, b)
+	{
+		return _.flatten(_.map(a, function(x)
+		{
+			return _.map(b, function(y)
+			{
+				return x.concat([y]);
+			});
+		}), true);
+	}, [ [] ]);
+}
+//------------------------------------------
+
+//------------------------------------------
+// CONSTANTS
+//------------------------------------------
+var
+	C_GAME_START	= 'C_GAME_START',
+	C_GAME_WIN		= 'C_GAME_WIN',
+	C_GAME_LOOSE	= 'C_GAME_LOOSE'
+;
+
+var IMAGES =
+{
+	C_GAME_START	: '',
+	C_GAME_WIN		: 'You megasnake! You win!<br><br>',
+	C_GAME_LOOSE	: 'Bad snake! You eat yourself!<br><br>',
+	C_APPLE_IMAGE	: '<img width=15px heigth=15px src="im/apple.png" alt="*">',
+	C_SNAKE_IMAGE	: '<img width=15px heigth=15px src="im/snake.png" alt="x">',
+};
+
+// RUNTIME STRUCTURES STORAGE
+var _d =
+{
+	GAME_STATE		: null,
+
+	LAYERS_CELLS	: null,
+	
+	moves_count : 0,
+	eaten_apples : 0,
+	
+	snake_ticks_skip_count: 0,
+	SNAKE_TAIL_STOP_COUNT: 4,
+	SNAKE_INIT_LEN		: 5,
+	APPLES_COUNT		: 0,
+	CONTAINER_APPLES: [],
+	CONTAINER_SNAKE_BODY: null,
+
+	pressed_keycode	: 0,
+};
+
+//------------------------------------------
+// TABLES
+//------------------------------------------
+/*
+     38
+     A
+37 D-|-B 39
+     C
+     40
+*/
+
+/**
+[KEY SCANCODE -> DIRECTION] MATCH MATRIX
+*/
+_d.key_movecode = 
+{
+	37 : 'D',
+	38 : 'A',
+	39 : 'B',
+	40 : 'C',
+};
+
+/**
+ALLOWED DIRECTIONS MATCH MATRIX
+[CURRENT MOVE DIRECTION -> ALLOWED NEXT DIRECTIONS]
+*/
+_d.moves_rights = 
+{
+	A : ['D', 'B', 'A'],
+	B : ['A', 'B', 'C'],
+	C : ['B', 'C', 'D'],
+	D : ['C', 'D', 'A'],
+};
+
+//------------------------------------------
+// FSA No1. MOVES FSA
+//------------------------------------------
+/*
+MOVES FSA WORK EXPLAIN
+
+MACHINE STATE (ALL POSSIBLE SNAKE MOVES)
+[
+    [0, 1, 2 ... N1_LEN]    N1   <- 
+    [0, 1, 2 ... N2_LEN]    N2   <- CYCLIC SHIFT BY fsa_No1_step() TO (L)EFT OR (R)IGHT. (L-SHIFT SAMPLE: [1, 2 ... N2_LEN, 0])
+    ...
+    [0, 1, 2 ... NX_LEN]    ND   <-
+]
+     ^
+     |
+  STATE FOR READ (fsa_No1_get_state())
+*/
+
+/**
+[CURRENT DIRECTION -> FSA SHIFT] MATCH MATRIX
+*/
+_d.fsa_shifts = 
+{
+//		INDEX FOR SHIFT 	SHIFT
+	A : { N : 0, shift : [-1, 0] },
+	B : { N : 1, shift : [0, 1] },
+	C : { N : 0, shift : [1, 0] },
+	D : { N : 1, shift : [0, -1] },
+};
+
+/**
+SWITCH FSA No1 STATE FUNCTION (MATCH MATRIX)
+*/
+function fsa_No1_step(direction)
+{
+	// GET DISTRIBUTION FOR CHANGE FSA STATE
+	var step = _d.fsa_shifts[direction];
+	
+	// DO CYCLIC SHIFT
+	_.each(step.shift, function(v,k,l)
+	{
+		// L-SHIFT
+		if(v > 0) _.times(Math.abs(v), function(n) { _d.NxNx_fsa_No1[step.N].push(_d.NxNx_fsa_No1[step.N].shift()); });
+		// R-SHIFT
+		if(v < 0) _.times(Math.abs(v), function(n) { _d.NxNx_fsa_No1[step.N].unshift(_d.NxNx_fsa_No1[step.N].pop()); });
+	});
+}
+
+/**
+GET USEFUL FSA (SUB)STATE
+*/
+function fsa_No1_get_state()
+{
+	return _.map(_d.NxNx_fsa_No1, function(v,k,l) { return v[0]; })
+}
+//------------------------------------------
+
+//------------------------------------------
+
+var _d_empty = R.clone(_d);
+
+//------------------------------------------
+
+/**
+// THIS IS 2 FSA ENGINES
+// No1. FSA FOR DO MOVES
+// No2. SNAKE FSA (USE FSA No1 FOR GET MOVE)
+*/
+function start()
+{
+	// YOU MUST STOP GAME BEFORE! OR YOU HAVE DOUBLE SPEED!
+	if(_d.GAME_STATE == C_GAME_START) { _d.GAME_STATE = C_GAME_LOOSE; return; }
+	
+	_d = R.clone(_d_empty);
+	
+	// GLOBAL
+	_d.GAME_STATE		= C_GAME_START;
+	
+	_d.N1 = parseInt($('[id=N1]').val()),
+	_d.N2 = parseInt($('[id=N2]').val()),
+	_d.M = parseInt($('[id=M]').val()),
+	_d.M = Math.min(_d.N1*_d.N2, _d.M); // OR USE min(_.reduce(), ...);
+	_d.APPLES_COUNT = _d.M;
+	
+	//------------------------------------------
+	// DO N-D MATRIX AND MATRIX FLAT MATCH
+	//------------------------------------------
+	// DO PLAYBOARD RANGES
+	/*
+	[
+		0, 1, 2, ..., N1
+		0, 1, 2, ..., N2
+		0, 1, 2, ..., NX
+		...
+	*/
+	var ND = [_d.N1, _d.N2];
+	_d.ND_count = LEN(ND); // NUMBER OF DIMENSIONS
+	var NxNx_ranges =  _.map(ND, function(N) { return _.range(0, N, 1); });
+
+	// DO PLAYBOARD N-D MATRIX (LIKE CHESSBOARD)
+	var NxNx = cartesianProduct.apply(null, NxNx_ranges);
+	
+	// FLAT MATCH MATRIX
+	// MAP N-D SPACE "POINT" (CONTAINER) TO 1-D SPACE "POINT" (CONTAINER)
+	// THIS FOLD N-D OBJECT TO FLAT MATRIX, SO N-D GOODBYE!
+	// FROM THIS PLACE WE DON'T KNOW ANY ABOUT DIMENSIONS (OR SHAPES), SO MATHSETS - I.E. RANGES - WELCOME!
+	_d.NxNx_text = _.map(NxNx, function(NxNx) { return NxNx_text(NxNx); });
+	//------------------------------------------
+
+	//------------------------------------------
+	// FSA No1. MOVES FINITE-STATE AUTOMATA (FSA)
+	//------------------------------------------
+	_d.ND_count_CONTAINER = _.range(0, _d.ND_count, 0); // N-D CONTAINER ("CELL")
+	_d.NxNx_fsa_No1 = R.clone(NxNx_ranges); // MOVES FINITE STATE AUTOMATA
+	//------------------------------------------
+	
+	//------------------------------------------
+	// FSA No2. SNAKE FSA. SET FSA No2 START STATE
+	//------------------------------------------
+	_d.pressed_keycode = 0;
+	_d.current_move = 'B';
+	_d.next_move = 'B';
+	
+	_d.CONTAINER_SNAKE_BODY = [];
+	// CREATE SNAKE BODY MOVING FSA No1
+	_.times(_d.SNAKE_INIT_LEN, function(n) { fsa_No1_step(_d.current_move); shift_snake_head(); });
+	//------------------------------------------
+
+	//------------------------------------------
+	// LINK DATA MAP AND HTML CELLS TEMPLATE
+	//------------------------------------------
+	// FSA No2
+	_d.fsa_No2_table = _.template(matrix2d(_d.NxNx_text, ND));
+	// FSA No1
+	var indexes = make_keys_indexes_for_show_ranges(NxNx_ranges);	
+	_d.fsa_No1_table = _.template(wrap_ranges_by_jsont(indexes));
+	_d.fsa_No1_indexes = _.flatten(indexes);
+	//------------------------------------------
+	
+	//------------------------------------------
+	// START FSA No2 LOOP
+	//------------------------------------------
+	fsa_No2_step();
+	keyscan_loop();
+	//------------------------------------------
+}
+
+
+function shift_snake_head()
+{
+	// DO HEAD AND APPEND IT TO SNAKE
+	var head_cell = fsa_No1_get_state();
+	_d.CONTAINER_SNAKE_BODY.unshift(NxNx_text(head_cell));
+}
+
+/**
+SWITCH FSA No2 STATE FUNCTION
+*/
+function fsa_No2_step()
+{
+	//------------------------------------------
+	// DETECT SNAKE MOVE DIRECTION
+	//------------------------------------------
+	if(_d.pressed_keycode in _d.key_movecode) _d.next_move = _d.key_movecode[_d.pressed_keycode];
+	// IS MOVE DIRECTION ALLOWED?
+	var tmp = _.intersection(_d.moves_rights[_d.current_move], [_d.next_move]);
+	if(tmp.length > 0) _d.current_move = _d.next_move;
+	//------------------------------------------
+	
+	fsa_No1_step(_d.current_move);
+	shift_snake_head();
+	
+	// IF _d.snake_ticks_skip_count <> 0 SNAKE GROW
+	if(_d.snake_ticks_skip_count == 0) _d.CONTAINER_SNAKE_BODY.pop();
+	
+	// DETECT SNAKE BODY INTERSECTIONS
+	if(_.union([], _d.CONTAINER_SNAKE_BODY).length != _d.CONTAINER_SNAKE_BODY.length) _d.GAME_STATE = C_GAME_LOOSE;
+	
+	// SET APPLES
+	if(LEN(_d.CONTAINER_APPLES) == 0)
+	{
+		// GET ALL CELLS
+		var a = R.clone(_d.NxNx_text);
+		// REMOVE SNAKE BODY FROM CELLS
+		a = _.difference(a, _d.CONTAINER_SNAKE_BODY);
+		// SHUFFLE
+		a = _.shuffle(a);
+		// GET APPLES
+		a.length = Math.min(LEN(a), _d.M);
+		
+		_d.CONTAINER_APPLES = a;
+	}
+
+	// IF SNAKE BODY INTERSECT APPLES, SO SNAKE EAT APPLES! AM!
+	var eats = _.intersection(_d.CONTAINER_SNAKE_BODY, _d.CONTAINER_APPLES);
+	if(LEN(eats) > 0)
+	{
+		// REMOVE APPLES FORM APPLES MATHSET
+		_d.CONTAINER_APPLES = _.difference(_d.CONTAINER_APPLES, eats);
+		// FREEZE SNAKE
+		_d.snake_ticks_skip_count += _d.SNAKE_TAIL_STOP_COUNT;
+		
+		_d.eaten_apples += LEN(eats);
+	}
+	// FREEZE MOVE TAIL AFTER SNAKE EAT APPLE 
+	if(_d.snake_ticks_skip_count >0) _d.snake_ticks_skip_count--;
+	
+	// SNAKE FILL ALL CELLS. USE 1 x 20 SNAKE BOX AND TRY IT!
+	if(LEN(_d.CONTAINER_SNAKE_BODY) == LEN(_d.NxNx_text)) _d.GAME_STATE = C_GAME_WIN;
+	
+	_d.moves_count++;
+	render();
+	
+	if(_d.GAME_STATE == C_GAME_START) _.delay(fsa_No2_step, 350);
+}
+
+function keyscan_loop()
+{
+	var keys = key.getPressedKeyCodes();
+	if(keys.length > 0) _d.pressed_keycode = keys[0];
+	
+	if(_d.GAME_STATE == C_GAME_START) _.delay(keyscan_loop, 50);
+}
+
+/**
+GO BY LAYERS PIE AND APPLY DATA FROM LAYERS TO EVERY CELL
+*/
+function render()
+{
+	//------------------------------------------
+	// FSA No2
+	//------------------------------------------
+	// CREATING MATRIX WITH DATA FOR HTML TABLE TEMPLATE
+	var matrix_layer = _.object(_d.NxNx_text, arr_fill(_d.NxNx_text.length, ''));
+	
+	// CREATE SNAKE AND APPLES LAYERS
+	var snake_layer = _.object(_d.CONTAINER_SNAKE_BODY, arr_fill(_d.CONTAINER_SNAKE_BODY.length, /* 'x' */ IMAGES.C_SNAKE_IMAGE));
+	var apples_layer = _.object(_d.CONTAINER_APPLES, arr_fill(_d.CONTAINER_APPLES.length, /* '*' */ IMAGES.C_APPLE_IMAGE));
+
+	// COMPOSE LAYER FOR SHOW
+	matrix_layer = _.extend(matrix_layer, snake_layer, apples_layer);
+	//------------------------------------------
+
+	//------------------------------------------
+	// FSA No1
+	//------------------------------------------
+	var fsa1_layer = _.object(_d.fsa_No1_indexes, _.flatten(_d.NxNx_fsa_No1));
+	//------------------------------------------
+
+	// RENDER TABLE
+	$('[id=matrix2d]').html(_d.fsa_No2_table(matrix_layer));
+	$('[id=game_state]').html(IMAGES[_d.GAME_STATE]);
+	
+	$('[id=moves_count]').html('' + _d.moves_count);
+	$('[id=eaten_apples]').html('' + _d.eaten_apples);
+	$('[id=snake_length]').html('' + _d.CONTAINER_SNAKE_BODY.length);
+
+	$('[id=matrix_fsa1]').html(_d.fsa_No1_table(fsa1_layer));
+
+}
+
+/**
+GENERATING HTML 2-D TABLE TEMPLATE
+*/
+function matrix2d(NxNx_text, ND)
+{
+	/*
+	SPLIT MATHSET TO CONTAINER WITH LINES
+	[X, X, X, X, X, X]
+	->
+	[
+		[X, X], <- LINE
+		[X, X], <- LINE
+		[X, X], <- LINE
+	]
+	*/
+	var G_lines = _.chunk(NxNx_text, ND[1]);
+	return wrap_ranges_by_jsont(G_lines);
+}
+
+/**
+GENERATING HTML TABLE FOR SHOW RANGES ("LINES")
+*/
+function wrap_ranges_by_jsont(ranges)
+{
+	return jsonT(ranges,
+	{
+		'self':			'<table class=gametable>{$}</table>',
+	 	'self[*]':		'<tr>{$}</tr>',
+	 	'self[*][*]':	'<td class=cell id={$} onclick=click_gateway("{$}")><b><%={$}%></b></td>',
+	});
+}
+
+function make_keys_indexes_for_show_ranges(ranges)
+{
+	return _.map(ranges, function(v,k,l)
+	{ 
+		return _.map(v, function(v1,k1,l1)
+		{ 
+			return 'N' + k + 'x' + v1;
+		});
+	});
+}
+
+/*
+//------------------------------------------
+// COMMENT
+//------------------------------------------
+
+// YOU ALSO MAY MOVE SNAKE BY MOVE SNAKE HEAD BY ALGORITHMIC WAY, LIKE THIS
+// BUT I DON'T LIKE IT!
+
+// (2D EXPLAIN)
+function move_snake_head_algorithmic_2d()
+{
+	var moves_offsets = 
+	{
+		A : [-1, 0],
+		B : [0, 1],
+		C : [1, 0],
+		D : [0, -1],
+	};
+
+	// CREATING BODY AND HEAD CONTAINERS
+	if(!_d.head_yx)
+	{
+		_d.container_snake_body = [];
+		_d.head_yx = [0, 0];
+		
+		_d.container_snake_body.push(R.clone(_d.head_yx));
+	}
+	
+	// MOVE HEAD
+	_d.head_yx[1] += moves_offsets[_d.current_move][1];
+	_d.head_yx[0] += moves_offsets[_d.current_move][0];
+
+	// CORRECT SNAKE HEAD POSITION DEPENDED BORDERS
+	if(_d.head_yx[1] >= _d.N2) _d.head_yx[1] = 0;
+	if(_d.head_yx[0] >= _d.N1) _d.head_yx[0] = 0;
+	if(_d.head_yx[1] < 0) _d.head_yx[1] = _d.N2-1;
+	if(_d.head_yx[0] < 0 ) _d.head_yx[0] = _d.N1-1;
+
+	// SNAKE: [[y,x], [y,x], [y,x], [y,x]]
+	// APPEND HEAD TO IT
+	_d.container_snake_body.push([_d.head_yx[0], _d.head_yx[1]]);
+	
+	// FREEZE MOVE TAIL AFTER SNAKE EAT APPLE 
+	if(_d.snake_ticks_skip_count == 0) _d.container_snake_body.shift();
+
+	_d.CONTAINER_SNAKE_BODY = NxNx_text_array(_d.container_snake_body);
+}
+//------------------------------------------
+*/
+
+//------------------------------------------
+// THIS IS COMPETITION
+//------------------------------------------
+// WRITE AND MINIFY YOUR ORIGINAL ALGORITHM OF CLASSIC SNAKE GAME
+// THE SMALLEST CODE WIN
+// 
+// MINIFY ONLINE
+// https://skalman.github.io/UglifyJS-online/
+// MINIFYER
+// https://github.com/mishoo/UglifyJS2
+// http://lisperator.net/uglifyjs/
+//------------------------------------------
+
+</script>
+	
+</body>
+</html>

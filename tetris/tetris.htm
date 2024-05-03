@@ -1,0 +1,1022 @@
+<html>
+<head>
+
+<title>Tetris N-D board ready (c) MasterMentor 2024</title>
+<meta charset='utf-8'>
+<script type='text/javascript' src='lib/key_codes.js'></script>
+<script type='text/javascript' src='lib/underscore.js'></script>
+<script type='text/javascript' src='lib/jsont.js'></script>
+<script type='text/javascript' src='lib2.js'></script>
+<script type='text/javascript' src='lib.js'></script>
+<script type='text/javascript' src='lib/webaudio-tinysynth.js'></script>
+
+<style>
+	.css_main_screen
+	{
+		border: 0.5rem outset pink;
+	}
+</style>
+
+</head>
+<body onload=main() background="resources/web/bacgr_red.gif">
+<script>
+
+var __ = {};
+__.RHAL = runtime_HAL;
+
+//------------------------------------------
+// MATH FUNCS
+//------------------------------------------
+// CONVERT MATHSET -> FLAT MATHSET: [A, B, C, ...] -> AxBxC...
+function DN_D1(GV) { return GV.join('x'); }
+// CONVERT FLAT MATHSET ->  -> AxBxC... -> [A, B, C, ...]
+function D1_DN(GV) { return GV.split('x'); }
+//------------------------------------------
+
+//------------------------------------------
+// ALGORITHMS
+//------------------------------------------
+function fill_map_by_keys(map, keys, value)
+{
+	_.each(keys, function(v,k,l){ map[v] = value; });
+}
+//------------------------------------------
+
+//------------------------------------------
+// CONSTANTS
+//------------------------------------------
+var CELL_IMAGE =
+[
+	{ path : 'resources/items/cell_01.png', type : 'file_image' },
+	{ path : 'resources/items/cell_02.png', type : 'file_image' },
+	{ path : 'resources/items/cell_03.png', type : 'file_image' },
+	{ path : 'resources/items/cell_04.png', type : 'file_image' },
+	{ path : 'resources/items/cell_05.png', type : 'file_image' },
+	{ path : 'resources/items/cell_06.png', type : 'file_image' },
+];
+
+var LEVEL_IMAGE =
+[
+	{ path : 'resources/set2/level_01.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_02.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_03.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_04.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_05.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_06.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_07.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_08.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_09.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_10.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_11.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_12.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_13.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_14.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_15.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_16.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_17.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_18.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_19.jpg', type : 'file_image' },
+	{ path : 'resources/set2/level_20.jpg', type : 'file_image' },
+];
+var LEVEL_MUSIC =
+[
+	{ path : 'resources/midi/level_01.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_02.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_03.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_04.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_05.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_06.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_07.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_08.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_09.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_10.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_11.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_12.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_13.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_14.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_15.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_16.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_17.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_18.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_19.mid', type : 'file_binary' },
+	{ path : 'resources/midi/level_20.mid', type : 'file_binary' },
+];
+
+var RESOURCE_SOUNDS =
+[
+	{ path : 'resources/sound/knock.mid', type : 'file_binary' },
+	{ path : 'resources/midi/win.mid', type : 'file_binary' },
+	{ path : 'resources/midi/titles.mid', type : 'file_binary' },
+];
+
+var RESOURCE_IMAGE =
+[
+	{ path : 'resources/set2/jacket04.jpg', type : 'file_image' },
+	{ path : 'resources/set2/win01.jpg', type : 'file_image' },
+];
+
+var RESOURCE_FONTS =
+[
+	{ path : 'resources/fonts/plymouth.ttf', type : 'file_font', id : 'RESOURCE_FONT_SCORE' },
+	{ path : 'resources/fonts/mazurka_script.ttf', type : 'file_font', id : 'RESOURCE_FONT_MAIN' },
+];
+
+var RESOURCE_OTHER =
+[
+	{ path : 'text_storage.htm', type : 'file_text' },
+];
+
+var LEVEL_SPEED =
+[
+	1000, 800, 800, 700, 700, 600, 500, 400, 400, 300,
+	300, 400, 200, 200, 200, 150, 150, 100, 100, 100
+];
+
+var LEVEL_SCORE =
+[
+	1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000,
+	11000, 12000, 13000, 14000, 15000, 16000, 17000, 18000, 19000, 20000,
+];
+
+var FIGURES =
+[
+	[
+		[
+			[0,0],[0,1],
+			[1,0],[1,1],
+		],
+		[
+			[0,0],[0,1],
+			[1,0],[1,1],
+		],
+		[
+			[0,0],[0,1],
+			[1,0],[1,1],
+		],
+		[
+			[0,0],[0,1],
+			[1,0],[1,1],
+		],
+	],
+
+	[
+		[
+			[0,0],[1,0],
+				 [1,1],[2,1],
+		],
+
+		[
+				  [1,0],
+			[0,1],[1,1],
+			[0,2],
+		],
+
+		[
+			[0,0],[1,0],
+				 [1,1],[2,1],
+		],
+
+		[
+				  [1,0],
+			[0,1],[1,1],
+			[0,2],
+		],
+	],
+
+	[
+		[
+			     [1,0],[2,0],
+			[0,1],[1,1],
+		],
+
+		[
+			  [0,0],
+			  [0,1],[1,1],
+			        [1,2],
+		],
+
+		[
+			     [1,0],[2,0],
+			[0,1],[1,1],
+		],
+
+		[
+			  [0,0],
+			  [0,1],[1,1],
+			        [1,2],
+		],
+	],
+
+	[
+		[
+			[0,0],[1,0],[2,0],
+						[2,1],
+		],
+
+		[
+			      [1,0],
+			      [1,1],
+			[0,2],[1,2],
+		],
+
+		[
+			[0,0],
+			[0,1],[1,1],[2,1],
+		],
+
+		[
+			[0,0],[1,0],
+			[0,1],
+			[0,2],
+		],
+	],
+
+	[
+		[
+						[2,0],
+			[0,1],[1,1],[2,1],
+		],
+
+		[
+			[0,0],
+			[0,1],
+			[0,2],[1,2],
+		],
+
+		[
+			[0,0],[1,0],[2,0],
+			[0,1],
+		],
+
+		[
+			[0,0],[1,0],
+				  [1,1],
+				  [1,2],
+		],
+	],
+
+	[
+		[
+				  [1,0],
+			[0,1],[1,1],[2,1],
+		],
+
+		[
+			[0,0],
+			[0,1],[1,1],
+			[0,2],
+		],
+
+		[
+			[0,0],[1,0],[2,0],
+				  [1,1],
+		],
+
+		[
+				  [2,0],
+			[1,1],[2,1],
+				  [2,2],
+		],
+	],
+
+	[
+		[
+			[0,0],[1,0],[2,0],[3,0],
+		],
+
+		[
+			[1,0],
+			[1,1],
+			[1,2],
+			[1,3],
+		],
+
+		[
+			[0,0],[1,0],[2,0],[3,0],
+		],
+
+		[
+			[1,0],
+			[1,1],
+			[1,2],
+			[1,3],
+		],
+	],
+];
+
+var
+	EVT_EMPTY			= 0,
+	EVT_TIMER			= 1,
+
+	EVT_CMD_NEW_FIGURE	= 20,
+
+	// !! THE SAME KEYS
+	EVT_CMD_ROTATE		= 501,
+	EVT_CMD_NEXT_LEVEL	= 501,
+	EVT_CMD_START		= 501,
+
+	EVT_CMD_LEFT		= 502,
+	EVT_CMD_RIGHT		= 503,
+	EVT_CMD_DROP		= 504,
+	EVT_CMD_DOWN		= 505,
+
+	EVT_CMD_PAUSE		= 506,
+	EVT_CMD_SPEED		= 507,
+
+	EVT_CMD_SOUND_DROP	= 508,
+
+	EVT_CMD_MUSIC_ON	= 509,
+	EVT_CMD_MUSIC_OFF	= 510,
+	EVT_CMD_SOUND_ON	= 511,
+	EVT_CMD_SOUND_OFF	= 512,
+
+
+	EVT_CMD_SWITCH_MUSIC	= 601
+;
+
+var
+	C_KEY_LEFT		= KeyCode.KEY_LEFT,
+	C_KEY_RIGHT		= KeyCode.KEY_RIGHT,
+	C_KEY_DROP		= KeyCode.KEY_DOWN,
+	C_KEY_DOWN		= KeyCode.KEY_UP,
+	C_KEY_PAUSE		= KeyCode.KEY_P,
+	C_KEY_SPEED		= KeyCode.KEY_L,
+
+	C_KEY_START		= KeyCode.KEY_SPACE,
+	C_KEY_ROTATE	= KeyCode.KEY_SPACE,
+	C_KEY_NEXT_LEVEL	= KeyCode.KEY_SPACE
+;
+
+var	M_KEY_CMD = {};
+	M_KEY_CMD[C_KEY_LEFT]	= EVT_CMD_LEFT;
+	M_KEY_CMD[C_KEY_RIGHT]	= EVT_CMD_RIGHT;
+	M_KEY_CMD[C_KEY_DROP]	= EVT_CMD_DROP;
+	M_KEY_CMD[C_KEY_DOWN]	= EVT_CMD_DOWN;
+	M_KEY_CMD[C_KEY_PAUSE]	= EVT_CMD_PAUSE;
+	M_KEY_CMD[C_KEY_SPEED]	= EVT_CMD_SPEED;
+
+	M_KEY_CMD[C_KEY_START]	= EVT_CMD_START;
+	M_KEY_CMD[C_KEY_ROTATE]	= EVT_CMD_ROTATE;
+	M_KEY_CMD[C_KEY_NEXT_LEVEL]	= EVT_CMD_NEXT_LEVEL;
+
+var
+	C_CELLS_X		= 12,
+	C_CELLS_Y		= 18,	// 1st LINE IS EMPTY, LEVEL / SCORE HERE
+
+	C_CELL_CX		= 24,
+	C_CELL_CY		= 24,
+
+	C_SCREEN_CX		= C_CELLS_X * C_CELL_CX,
+	C_SCREEN_CY		= C_CELLS_Y * C_CELL_CY,
+
+	C_SCREEN_CRECT	= [0,0,C_SCREEN_CX,C_SCREEN_CY],
+	C_CELL_CRECT	= [0,0,C_CELL_CX,C_CELL_CY],
+
+	C_CELL_IMAGE_CRECT		= [0,0,32,32],
+
+	C_SCREEN_CELLS_CRECTS	= {},
+
+	C_TIMER_INTERVAL_MS		= 50,
+
+	C_CELL_COLOR_EMPTY	= -1,
+	C_FIGURE_COLORS	= 6,
+	C_FIGURES_TOTAL	= 7,
+	C_FIGURE_ROUNDS = 4,
+	C_LEVELS_TOTAL	= 20, // 20
+
+	C_LINE_SCORE	= 100,
+
+	RESOURCE_IMAGE_WAIT	= 0,
+	RESOURCE_IMAGE_WIN	= 1,
+
+	RESOURCE_FONT_SCORE	= 0,
+	RESOURCE_FONT_MAIN	= 1,
+
+	RESOURCE_OTHER_TEXT_STORAGE	= 0,
+
+	RESOURCE_SOUND_KNOCK = 0,
+	RESOURCE_MUSIC_GAME_SCREEN_WIN = 1,
+	RESOURCE_MUSIC_GAME_SCREEN_WAIT = 2
+;
+
+var
+	C_STATE_EMPTY	= 0,
+
+	C_GAME_SCREEN_WAIT			= 1,
+	C_GAME_SCREEN_WIN			= 2,
+	C_GAME_SCREEN_LOOSE			= 3,
+	C_GAME_SCREEN_LEVEL_END		= 4,
+	C_GAME_SCREEN_PAUSE			= 5,
+	C_GAME_SCREEN_PLAYING		= 6,
+
+	C_GAME_SOUND				= 1 << 0,
+	C_GAME_MUSIC				= 1 << 1,
+	C_BROWSER_HELL_HACK			= 1 << 2,
+
+	C_FIGURE_OUT_OF_GANGE			= 1 << 0,
+	C_FIGURE_GROUND_INTERSECTED		= 1 << 1
+;
+//------------------------------------------
+
+var FIGURE_struct =
+{
+	N_FIGURE		: 0,
+	N_ROUND			: 0,
+	N_COLOR			: 0,
+	N_CELL_X		: 0,
+	N_CELL_Y		: 0,
+	CELLS			: [],
+	STATE			: C_STATE_EMPTY,
+};
+
+//------------------------------------------
+// RUNTIME STRUCTURES STORAGE
+//------------------------------------------
+var RT =
+{
+	GAME_STATE			: C_GAME_SCREEN_WAIT,
+	CONTROLS_STATE		: C_GAME_SOUND | C_GAME_MUSIC,
+
+	N_LEVEL				: 0,
+	N_SCORE				: 0,
+	N_SPEED				: 0,
+	N_TIMER				: 0,
+	N_LEVEL_MS			: 0,
+
+	SCREEN				: null,
+	SCREEN_BUFFER		: null,
+
+	GROUND_CELLS_COLORS		: {},
+
+	GROUND_CELLS		: [],
+
+	FIGURE				: null,
+
+	BAG					: {}, // GLOBAL TEXT STORAGE
+
+	MUSIC_PLAYER		: null,
+	MUSIC_PLAYER2		: null,
+};
+//------------------------------------------
+
+async function main()
+{
+	await init();
+	main_loop();
+}
+
+async function init()
+{
+	//------------------------------------------
+	// LOAD RESOURCES
+	//------------------------------------------
+	await __.RHAL.load_files(CELL_IMAGE);
+	await __.RHAL.load_files(LEVEL_IMAGE);
+	await __.RHAL.load_files(RESOURCE_IMAGE);
+	await __.RHAL.load_files(RESOURCE_FONTS);
+	await __.RHAL.load_files(RESOURCE_OTHER);
+	await __.RHAL.load_files(LEVEL_MUSIC);
+	await __.RHAL.load_files(RESOURCE_SOUNDS);
+
+	//------------------------------------------
+	// HTML, TEXT, ECT RESOURCES HERE
+	//------------------------------------------
+	RT.BAG = LIB.TextBlockStorageClass.template_items(RESOURCE_OTHER[RESOURCE_OTHER_TEXT_STORAGE].resource);
+	HTML('about_section', RT.BAG['ABOUT']);
+	//------------------------------------------
+
+	//------------------------------------------
+	// INIT SCREEN & DOUBLE BUFFER
+	//------------------------------------------
+	RT.SCREEN			= new_clone(__.RHAL.struct_surface_2d);
+	RT.SCREEN_BUFFER	= new_clone(__.RHAL.struct_surface_2d);
+	RT.SCREEN.container	= 'main_screen';
+	__.RHAL.init_surface_2d(true, RT.SCREEN, C_SCREEN_CRECT);
+	__.RHAL.init_surface_2d(true, RT.SCREEN_BUFFER, C_SCREEN_CRECT);
+	//------------------------------------------
+
+	//------------------------------------------
+	// INIT MAPS
+	//------------------------------------------
+
+	//------------------------------------------
+	// DO N-D MATRIX AND MATRIX FLAT MATCH
+	//------------------------------------------
+	// DO PLAYBOARD RANGES
+	/*
+	[
+		0, 1, 2, ..., G
+		0, 1, 2, ..., V
+		0, 1, 2, ..., Z
+		...
+	*/
+	RT.GnVn = [C_CELLS_X, C_CELLS_Y];
+	RT.GnVn_range =  _.map(RT.GnVn, function(N) { return _.range(0, N, 1); });
+
+	// DO PLAYBOARD N-D MATRIX (LIKE CHESSBOARD)
+	RT.GV = cartesianProduct.apply(null, RT.GnVn_range);
+
+	// FLAT MATCH MATRIX
+	// MAP N-D SPACE "POINT" (CELL OR CONTAINER) TO 1-D SPACE "POINT" (CELL OR CONTAINER)
+	// THIS FOLD N-D OBJECT TO FLAT MATRIX, SO N-D GOODBYE!
+	// FROM THIS PLACE WE DON'T KNOW ANY ABOUT DIMENSIONS (OR SHAPES), SO MATHSETS - I.E. RANGES - WELCOME!
+	// THIS IS ISOMORFIC MAP, AND HERE MAY BE MATHSET LIKE [0,1,2,3 ... ] BUT [0x0,0x1,0x2,0x3 ... ] MORE DEMONSTRABLY
+	RT.GxV = _.map(RT.GV, function(GV) { return DN_D1(GV); });
+	RT.GxV_GV = _.object(RT.GxV, RT.GV);
+	//------------------------------------------
+
+	var
+		N_SCREEN_CELL_CX =  _.range(0, C_SCREEN_CX, C_CELL_CX),
+		N_SCREEN_CELL_CY =  _.range(0, C_SCREEN_CY, C_CELL_CY);
+
+	C_SCREEN_CELLS_CRECTS = _.mapObject(RT.GxV_GV, function(v,k,l) { return [N_SCREEN_CELL_CX[v[0]], N_SCREEN_CELL_CY[v[1]], C_CELL_CX, C_CELL_CY]; });
+
+	var cols = _.chunk(RT.GxV, C_CELLS_Y);
+	RT.GxV_LINES = _.map(_.range(0, C_CELLS_Y, 1), function(v,k,l) { return _.pluck(cols, v); });
+
+	reset_game_state();
+
+	// CREATE TIMER
+	setInterval(async function() { events_gateway(EVT_TIMER) }, C_TIMER_INTERVAL_MS);
+	// KEYBOARD INTERRUPT
+	document.addEventListener('keydown', function(event) { click_gateway(event); } );
+}
+
+function reset_game_state()
+{
+	//------------------------------------------
+	// INIT GAME
+	RT.GROUND_CELLS_COLORS = _.object(RT.GxV, arr_fill(LEN(RT.GxV), C_CELL_COLOR_EMPTY));
+	RT.GROUND_CELLS = [];
+
+	RT.N_LEVEL				= 0;
+	RT.N_SCORE				= 0;
+	RT.N_SPEED				= 0;
+	RT.N_TIMER				= 0;
+	RT.N_LEVEL_MS			= 0;
+	//------------------------------------------
+
+	RT.GAME_STATE			= C_GAME_SCREEN_WAIT;
+}
+
+/**
+ONCLICK ENTRY
+*/
+function click_gateway(event)
+{
+	// BROWSER HELL, ALLOW MUSIC
+	if(! (RT.CONTROLS_STATE & C_BROWSER_HELL_HACK))
+	{
+		RT.CONTROLS_STATE |= C_BROWSER_HELL_HACK;
+		events_gateway(EVT_CMD_SWITCH_MUSIC);
+	}
+
+	if(event.keyCode in M_KEY_CMD)
+	{
+		//------------------------------------------
+		// BROWSER HELL
+		event.preventDefault(); // DISABLE BROWSER HANDING USED KEYS
+		//------------------------------------------
+
+		events_gateway(M_KEY_CMD[event.keyCode]);
+	}
+}
+
+// BROWSER HELL HACK
+function click_gateway2(event)
+{
+	//------------------------------------------
+	// BROWSER HELL
+	document.activeElement.blur(); // REMOVING FOCUS FROM BUTTONS, FOR NOT PUSH BUTTON TWICE
+	//------------------------------------------
+
+	events_gateway(event);
+}
+
+function figure_alloc()
+{
+	var F = new_clone(FIGURE_struct);
+	F.N_FIGURE		= Math.floor(Math.random() * C_FIGURES_TOTAL);
+	F.N_ROUND		= 0;
+	F.N_COLOR		= Math.floor(Math.random() * C_FIGURE_COLORS);
+	F.N_CELL_X		= (C_CELLS_X / 2)-1;
+	F.N_CELL_Y		= 1;
+	return F;
+}
+
+function fugure_calc_state(F)
+{
+	F.CELLS = new_clone(FIGURES[F.N_FIGURE][F.N_ROUND]);
+	F.CELLS = _.map(F.CELLS, function(v,k,l){ return DN_D1([v[0]+F.N_CELL_X, v[1]+F.N_CELL_Y]); });
+
+	F.STATE = C_STATE_EMPTY;
+	if(LEN(_.difference(F.CELLS, RT.GxV))) F.STATE  |= C_FIGURE_OUT_OF_GANGE;
+	else if(LEN(_.intersection(F.CELLS, RT.GROUND_CELLS))) F.STATE  |= C_FIGURE_GROUND_INTERSECTED;
+}
+
+function events_gateway(id, param)
+{
+	//------------------------------------------
+	// KEYS HANDING
+	//------------------------------------------
+	switch(id)
+	{
+		//------------------------------------------
+		// CONTROLS STATE
+		//------------------------------------------
+		case EVT_CMD_MUSIC_ON:
+			RT.CONTROLS_STATE |= C_GAME_MUSIC;
+			events_gateway(EVT_CMD_SWITCH_MUSIC);
+		return;
+		case EVT_CMD_MUSIC_OFF:
+			RT.CONTROLS_STATE = BITS(RT.CONTROLS_STATE, 0, C_GAME_MUSIC);
+			events_gateway(EVT_CMD_SWITCH_MUSIC);
+		return;
+		case EVT_CMD_SOUND_ON:
+			RT.CONTROLS_STATE |= C_GAME_SOUND;
+			events_gateway(EVT_CMD_SWITCH_MUSIC);
+		return;
+		case EVT_CMD_SOUND_OFF:
+			RT.CONTROLS_STATE = BITS(RT.CONTROLS_STATE, 0, C_GAME_SOUND);
+			events_gateway(EVT_CMD_SWITCH_MUSIC);
+		return;
+		//------------------------------------------
+
+		//------------------------------------------
+		// TIMER HANDING
+		//------------------------------------------
+		case EVT_TIMER:
+			if(RT.GAME_STATE != C_GAME_SCREEN_PLAYING) return;
+
+			RT.N_LEVEL_MS += C_TIMER_INTERVAL_MS;
+			RT.N_TIMER += C_TIMER_INTERVAL_MS;
+			if(RT.N_TIMER > LEVEL_SPEED[RT.N_SPEED]) events_gateway(EVT_CMD_DOWN);
+		return; // DISABLE RENDER AT TIMER EVENT
+		//------------------------------------------
+
+		//------------------------------------------
+		// GAMES STATE
+		//------------------------------------------
+		case EVT_CMD_SPEED:
+			RT.N_SPEED = Math.min(++RT.N_SPEED, C_LEVELS_TOTAL-1);
+		return;
+
+		case EVT_CMD_PAUSE:
+			if((RT.GAME_STATE == C_GAME_SCREEN_PLAYING) || (RT.GAME_STATE == C_GAME_SCREEN_PAUSE))
+			{
+				RT.GAME_STATE = (RT.GAME_STATE == C_GAME_SCREEN_PLAYING) ? C_GAME_SCREEN_PAUSE : C_GAME_SCREEN_PLAYING;
+				render();
+			}
+		return;
+
+		// THIS KEY MAY BE THE SAME KEY
+		case EVT_CMD_ROTATE:
+		case EVT_CMD_NEXT_LEVEL:
+		case EVT_CMD_START:
+			var is_state_changed = true;
+
+			switch(RT.GAME_STATE)
+			{
+				 // WAIT SCREEN DETECTED
+				case C_GAME_SCREEN_WIN:
+				case C_GAME_SCREEN_LOOSE:
+					RT.GAME_STATE = C_GAME_SCREEN_WAIT;
+				break;
+
+				 // START DETECTED
+				case C_GAME_SCREEN_WAIT:
+					reset_game_state();
+					RT.GAME_STATE			= C_GAME_SCREEN_PLAYING;
+					events_gateway(EVT_CMD_NEW_FIGURE);
+				break;
+
+				 // NEXT LEVEL DETECTED
+				case C_GAME_SCREEN_LEVEL_END:
+					RT.N_LEVEL++;
+					if(RT.N_LEVEL < C_LEVELS_TOTAL)
+					{
+						RT.GAME_STATE			= C_GAME_SCREEN_PLAYING;
+						RT.GROUND_CELLS = [];
+						fill_map_by_keys(RT.GROUND_CELLS_COLORS, _.keys(RT.GROUND_CELLS_COLORS), C_CELL_COLOR_EMPTY);
+						RT.N_SPEED = Math.max(RT.N_SPEED, RT.N_LEVEL);
+						events_gateway(EVT_CMD_NEW_FIGURE);
+					}
+					else RT.GAME_STATE = C_GAME_SCREEN_WIN;
+				break;
+
+				 // ROTATE DETECTED
+				case C_GAME_SCREEN_PLAYING:
+				case C_GAME_SCREEN_PAUSE:
+					is_state_changed = false;
+				break;
+			}
+
+			if(is_state_changed)
+			{
+				events_gateway(EVT_CMD_SWITCH_MUSIC);
+				render();
+			}
+		break;
+
+		case EVT_CMD_SOUND_DROP:
+			try
+			{
+				if(RT.MUSIC_PLAYER2) RT.MUSIC_PLAYER2.playMIDI();
+			}
+			catch(e) { LOG(e); }
+		break;
+
+		case EVT_CMD_SWITCH_MUSIC:
+			try
+			{
+				//------------------------------------------
+				// BROWSER HELL: YOU CAN'T PLAY ANY SOUND IN BROWSER BEFORE USER CLICK PAGE. SO.. INIT MUSIC HERE
+				//------------------------------------------
+				// SEE How to handle "Uncaught (in promise) DOMException: play() failed because the user didn't interact with the document first."
+				// https://stackoverflow.com/questions/49930680/how-to-handle-uncaught-in-promise-domexception-play-failed-because-the-use
+				//------------------------------------------
+				if(!(RT.CONTROLS_STATE & C_BROWSER_HELL_HACK)) break;
+
+				if(!RT.MUSIC_PLAYER)
+				{
+					RT.MUSIC_PLAYER = new WebAudioTinySynth( { loop:1 } );
+					RT.MUSIC_PLAYER2 = new WebAudioTinySynth( { loop:0 } );
+
+					RT.MUSIC_PLAYER2.loadMIDI(RESOURCE_SOUNDS[RESOURCE_SOUND_KNOCK].resource);
+				}
+				//------------------------------------------
+
+				RT.MUSIC_PLAYER.stopMIDI();
+
+				if(!(RT.CONTROLS_STATE & C_GAME_MUSIC)) break;
+
+				var resource = null;
+				switch(RT.GAME_STATE)
+				{
+					case C_GAME_SCREEN_WAIT:
+						resource = LEVEL_MUSIC[RESOURCE_MUSIC_GAME_SCREEN_WAIT].resource;
+						//sound_api(SOUND_PLAY, { resource : RESOURCE_SOUNDS[RESOURCE_MUSIC_GAME_SCREEN_WAIT].resource });
+					break;
+					case C_GAME_SCREEN_WIN:
+						resource = LEVEL_MUSIC[RESOURCE_MUSIC_GAME_SCREEN_WIN].resource;
+						//sound_api(SOUND_PLAY, { resource : RESOURCE_SOUNDS[RESOURCE_MUSIC_GAME_SCREEN_WIN].resource });
+					break;
+					case C_GAME_SCREEN_PAUSE:
+					case C_GAME_SCREEN_LOOSE:
+					case C_GAME_SCREEN_PLAYING:
+						resource = LEVEL_MUSIC[RT.N_LEVEL].resource;
+						//sound_api(SOUND_PLAY, { resource : LEVEL_MUSIC[RT.N_LEVEL].resource });
+					break;
+					default:
+						LOG('LOGIC ERROR');
+					break;
+				}
+
+				RT.MUSIC_PLAYER.loadMIDI(resource);
+				RT.MUSIC_PLAYER.playMIDI();
+			}
+			catch(e) { LOG(e); }
+		return;
+		//------------------------------------------
+
+	}
+	//------------------------------------------
+
+	// NO MOVES ALLOWED
+	if(RT.GAME_STATE != C_GAME_SCREEN_PLAYING) return;
+
+	//------------------------------------------
+	// MOVES LOGIG
+	//------------------------------------------
+	var if_valid_position = function(F)
+	{
+		fugure_calc_state(F);
+		return !(F.STATE & (C_FIGURE_OUT_OF_GANGE | C_FIGURE_GROUND_INTERSECTED));
+	};
+
+	var F = new_clone(RT.FIGURE);
+	switch(id)
+	{
+		case EVT_CMD_LEFT:
+			--F.N_CELL_X;
+			if(if_valid_position(F)) RT.FIGURE = F;
+		break;
+		case EVT_CMD_RIGHT:
+			++F.N_CELL_X;
+			if(if_valid_position(F)) RT.FIGURE = F;
+		break;
+		case EVT_CMD_ROTATE:
+			if(++F.N_ROUND >= C_FIGURE_ROUNDS) F.N_ROUND = 0;
+			if(if_valid_position(F)) RT.FIGURE = F;
+		break;
+		case EVT_CMD_DROP:
+			do { events_gateway(EVT_CMD_DOWN); }
+			while(
+				RT.GAME_STATE == C_GAME_SCREEN_PLAYING &&
+				RT.FIGURE.N_CELL_Y != 1	// NEW FIGURE PASSED
+			);
+		break;
+		case EVT_CMD_DOWN:
+			F.N_CELL_Y++;
+			fugure_calc_state(F);
+
+			switch(true)
+			{
+				case !!(F.STATE & C_FIGURE_OUT_OF_GANGE): // 1st LINE
+				case !!(F.STATE & C_FIGURE_GROUND_INTERSECTED): // GROUND
+					RT.GROUND_CELLS = _.union(RT.GROUND_CELLS, RT.FIGURE.CELLS);
+					fill_map_by_keys(RT.GROUND_CELLS_COLORS, RT.FIGURE.CELLS, RT.FIGURE.N_COLOR);
+
+					//------------------------------------------
+					// REMOVE LINES
+					//------------------------------------------
+					// CHECK LINES FOR REMOVE
+					var lines = _.filter(RT.GxV_LINES, function(v,k,l)
+					{
+						return LEN(_.intersection(v, RT.GROUND_CELLS)) == LEN(v);
+					});
+					if(LEN(lines))
+					{
+						// REMOVE LINES
+						var REMOVE = _.flatten(lines);
+						RT.GROUND_CELLS = _.difference(RT.GROUND_CELLS, REMOVE);
+						fill_map_by_keys(RT.GROUND_CELLS_COLORS, REMOVE, C_CELL_COLOR_EMPTY);
+
+						// DROP CELLS
+						var  Y = RT.GxV_GV[lines[0][0]][1];
+						var REMOVE = _.filter(RT.GROUND_CELLS, function(v,k,l) { return RT.GxV_GV[v][1] < Y; });
+						var ADD = _.map(REMOVE, function(v,k,l) { return DN_D1([RT.GxV_GV[v][0], RT.GxV_GV[v][1]+LEN(lines)]); });
+
+						RT.GROUND_CELLS = _.difference(RT.GROUND_CELLS, REMOVE);
+						RT.GROUND_CELLS = _.union(RT.GROUND_CELLS, ADD);
+
+						var COLORS = _.map(REMOVE, function(v,k,l) { return RT.GROUND_CELLS_COLORS[v]; });
+						fill_map_by_keys(RT.GROUND_CELLS_COLORS, REMOVE, C_CELL_COLOR_EMPTY);
+						_.each(ADD, function(v,k,l) { RT.GROUND_CELLS_COLORS[v] = COLORS[k]; });
+
+						RT.N_SCORE += C_LINE_SCORE*LEN(lines); // C_LINE_SCORE*LEN(lines)
+						if(RT.N_SCORE >= LEVEL_SCORE[RT.N_LEVEL])
+						{
+							RT.GAME_STATE			= C_GAME_SCREEN_LEVEL_END;
+							break;
+						}
+					}
+					//------------------------------------------
+
+					events_gateway(EVT_CMD_NEW_FIGURE);
+					RT.N_TIMER = 0;
+
+					if(RT.CONTROLS_STATE & C_GAME_SOUND)
+					{
+						// sound_api(SOUND_PLAY, { resource : RESOURCE_SOUNDS[RESOURCE_SOUND_KNOCK].resource });
+						events_gateway(EVT_CMD_SOUND_DROP);
+					}
+				break;
+
+				default:
+					RT.FIGURE = F;
+					RT.N_TIMER = 0;
+				break;
+			}
+		break;
+
+		case EVT_CMD_NEW_FIGURE:
+			var F = figure_alloc();
+			fugure_calc_state(F);
+
+			if(F.STATE & C_FIGURE_GROUND_INTERSECTED) RT.GAME_STATE = C_GAME_SCREEN_LOOSE;
+			else RT.FIGURE = F;
+		break;
+	}
+	//------------------------------------------
+
+	render();
+}
+
+function main_loop()
+{
+	render();
+	events_gateway(EVT_CMD_SWITCH_MUSIC);
+//	events_gateway(EVT_CMD_START);
+}
+
+
+/**
+GO BY LAYERS PIE AND APPLY DATA FROM LAYERS TO EVERY CELL
+*/
+function render()
+{
+	// COMPOSE SCREEN
+	draw_api(DRAW_CLEAR,	{ surface : RT.SCREEN_BUFFER, crect : C_SCREEN_CRECT } );
+
+	switch(RT.GAME_STATE)
+	{
+		case C_GAME_SCREEN_WAIT:
+			// BACKGROUND
+			draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : C_SCREEN_CRECT, crect_uv : C_SCREEN_CRECT, resource : RESOURCE_IMAGE[RESOURCE_IMAGE_WAIT].resource } );
+		break;
+		case C_GAME_SCREEN_WIN:
+			// BACKGROUND
+			draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : C_SCREEN_CRECT, crect_uv : C_SCREEN_CRECT, resource : RESOURCE_IMAGE[RESOURCE_IMAGE_WIN].resource } );
+		break;
+
+		case C_GAME_SCREEN_LEVEL_END:
+			// BACKGROUND
+			draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : C_SCREEN_CRECT, crect_uv : C_SCREEN_CRECT, resource : LEVEL_IMAGE[RT.N_LEVEL].resource } );
+		break;
+
+		case C_GAME_SCREEN_PLAYING:
+		case C_GAME_SCREEN_LOOSE:
+		case C_GAME_SCREEN_PAUSE:
+			// BACKGROUND
+			draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : C_SCREEN_CRECT, crect_uv : C_SCREEN_CRECT, resource : LEVEL_IMAGE[RT.N_LEVEL].resource } );
+			// GROUND
+			_.each(RT.GROUND_CELLS_COLORS, function(v,k,l)
+			{
+				if(v != C_CELL_COLOR_EMPTY) draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : C_SCREEN_CELLS_CRECTS[k], crect_uv : C_CELL_IMAGE_CRECT, resource : CELL_IMAGE[v].resource } );
+			});
+			// FIGURE
+			_.each(RT.FIGURE.CELLS, function(v,k,l)
+			{
+				draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : C_SCREEN_CELLS_CRECTS[v], crect_uv : C_CELL_IMAGE_CRECT, resource : CELL_IMAGE[RT.FIGURE.N_COLOR].resource } );
+			});
+
+			// SCORE
+			draw_api(DRAW_TEXT,
+				{
+					surface			: RT.SCREEN_BUFFER,
+					is_switch_font	: true,
+					font			: 'RESOURCE_FONT_SCORE',
+					font_height		: 20,
+					is_fill			: true,
+					fill_color		: 'brown',
+					is_stroke		: false,
+					stroke_color	: 'black',
+					stroke_width	: 2,
+					x				: 0,
+					y				: 4,
+					text			: '        level: ' + RT.N_LEVEL +'   score: ' + RT.N_SCORE,
+				} );
+		break;
+	}
+
+	var state_text = null;
+	var x = 0;
+	switch(RT.GAME_STATE)
+	{
+		case C_GAME_SCREEN_LOOSE:
+			state_text = 'Game Over';
+			x = 20;
+		case C_GAME_SCREEN_PAUSE:
+			if(!state_text)  { state_text = 'Pause'; x = C_SCREEN_CX/2-60; }
+
+		// STATE
+		draw_api(DRAW_TEXT,
+			{
+				surface			: RT.SCREEN_BUFFER,
+				is_switch_font	: true,
+				font			: 'RESOURCE_FONT_MAIN',
+				font_height		: 60,
+				is_fill			: true,
+				fill_color		: 'white',
+				is_stroke		: true,
+				stroke_color	: 'black',
+				stroke_width	: 2,
+				x				: x,
+				y				: C_SCREEN_CY/2+120,
+				text			: state_text,
+			} );
+		break;
+	}
+
+	// COPY BUFFER TO VIDEO MEMORY
+	draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN, crect : C_SCREEN_CRECT, crect_uv : C_SCREEN_CRECT, resource : RT.SCREEN_BUFFER.draw_api.canvas } );
+}
+
+
+</script>
+
+<h1>Tetris</h1>
+
+<button onclick=click_gateway2(EVT_CMD_START)>Start</button>
+<button onclick=click_gateway2(EVT_CMD_PAUSE)>Pause</button>
+<button onclick=click_gateway2(EVT_CMD_SPEED)>Increase Speed</button>
+<br>
+<button onclick=click_gateway2(EVT_CMD_MUSIC_ON)>Music On</button>
+<button onclick=click_gateway2(EVT_CMD_MUSIC_OFF)>Music Off</button>
+<button onclick=click_gateway2(EVT_CMD_SOUND_ON)>Sound On</button>
+<button onclick=click_gateway2(EVT_CMD_SOUND_OFF)>Sound Off</button>
+<br><br>
+
+<canvas id=main_screen  class="css_main_screen"></canvas>
+<span id=midi_player></span>
+<span id=midi_player2></span>
+
+<br><br>
+Move Keys: Up,Down,Left,Right,Space
+<br>
+Control Keys: Space - Start, P - Pause, L - Increase Speed
+<br><br>
+<span id=about_section></span>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<html>
+<head>
+
+<title>Minesweeper Micro Engine N-D board ready (c) MasterMentor 2019</title>
+<meta charset='utf-8'>
+<script type='text/javascript' src='underscore.js'></script>
+<script type='text/javascript' src='ramda.js'></script>
+<script type='text/javascript' src='jsont.js'></script>
+<script type='text/javascript' src='jquery-3.3.1.js'></script>
+
+<style>
+.gametable
+{
+	border-collapse: collapse;
+}
+.cell
+{
+	width: 20px;
+	height: 20px;
+	border: 1px solid black;
+    text-align: center; 
+    vertical-align: middle;
+}
+</style>
+
+</head>
+<body onload=start()>
+<h1>Minesweeper N-D</h1>
+
+Heigth= <input type=text id=G size=5 maxlength=5 value=20><br>
+Width=  <input type=text id=V size=5 maxlength=5 value=20><br>
+Mines=  <input type=text id=M size=5 maxlength=5 value=40><br>
+
+Closed: <span id=cells_closed></span><br>
+<button onclick=start()>Start</button>
+<br><br>
+
+	<div id=matrix2d></div><br>
+	<div id=game_state></div>
+
+<br><br>
+This Minesweeper is N-Dimension board play ready.
+<br>
+Change matrix2d() function, and play Minesweeper at 3-D, 4-D ect. board.
+<br>
+This job made for fun and childs teaching.
+<script>
+var C_BOMB="B",C_BOOMBOMB="D",C_NO_OPEN_AREA=-1;C_GAME_START="C_GAME_START",C_GAME_WIN="C_GAME_WIN",C_GAME_LOOSE="C_GAME_LOOSE",C_GAME_LOOSE1="C_GAME_LOOSE1";var IMAGES={C_GAME_START:"",C_GAME_WIN:'You lucky!<br><br><img src="im/win.png" alt="">',C_GAME_LOOSE:'Booom!<br><br><img src="im/boom.jpg" alt="">',C_GAME_LOOSE1:'Booom!<br><br><img src="im/boom1.png" alt="">'},_d={GAME_STATE:null,LAYERS_CELLS:null,OPEN_CELLS_RANGES:null,GxV_text:null,MINES_COUNT:0};function GV_text(_){return"GV_"+_.join("x")}function arr_fill(E,t){return _.times(E,function(_){return R.clone(t)})}function LOG(){console.log.apply(console,arguments)}function cartesianProduct(){return _.reduce(arguments,function(E,t){return _.flatten(_.map(E,function(E){return _.map(t,function(_){return E.concat([_])})}),!0)},[[]])}function gen_square(E){var t=_.map(E,function(_){return[_,_-1,_+1]});return t=cartesianProduct.apply(null,t),t=_.map(t,function(_){return GV_text(_)})}function matrix2d(E,t){var n=_.chunk(E,t[1]);return jsonT(n,{self:"<table class=gametable>{$}</table>","self[*]":"<tr>{$}</tr>","self[*][*]":'<td class=cell id={$} onclick=click_gateway("{$}")><b><%={$}%></b></td>'})}function render(){var E=_.object(_d.GxV_text,arr_fill(_d.GxV_text.length,null));_.some(E,function(_,E,t){var n=_d.LAYERS_CELLS.NUMBERS[E];n&&(t[E]=""+n),(n=_d.LAYERS_CELLS.MINES[E])&&(t[E]=n),(n=_d.LAYERS_CELLS.TOP_LAYER[E])||(t[E]="?")});var t=0;_.some(_d.LAYERS_CELLS.TOP_LAYER,function(_){_||t++}),$("[id=matrix2d]").html(matrix2d_(E)),$("[id=game_state]").html(IMAGES[_d.GAME_STATE]),$("[id=cells_closed]").html(t)}function fill_layer(E,t,n){_.some(t,function(_){E[_]=n})}function start(){_d.GAME_STATE=C_GAME_START;var E=parseInt($("[id=G]").val()),t=parseInt($("[id=V]").val()),n=parseInt($("[id=M]").val());n=Math.min(E*t,n);_d.MINES_COUNT=n;var r=[E,t],e=_.map(r,function(E){return _.range(0,E,1)}),S=cartesianProduct.apply(null,e);_d.GxV_text=_.map(S,function(_){return GV_text(_)});var A=["MINES","NUMBERS","ZERO_AREAS","TOP_LAYER"],L=[null,0,C_NO_OPEN_AREA,null];_d.LAYERS_CELLS=_.object(A,_.map(A,function(E,t){return _.object(_d.GxV_text,arr_fill(_d.GxV_text.length,L[t]))}));var a=_.map(S,function(_){return gen_square(_)});a=_.map(a,function(E){return _.filter(E,function(E){return!_.isUndefined(_d.LAYERS_CELLS.TOP_LAYER[E])})});var l=_.object(_d.GxV_text,a),i=_.shuffle(R.clone(_d.GxV_text));i.length=n,fill_layer(_d.LAYERS_CELLS.MINES,i,C_BOMB),_.some(_d.LAYERS_CELLS.NUMBERS,function(E,t,n){_d.LAYERS_CELLS.MINES[t]==C_BOMB&&_.some(l[t],function(_){n[_]++})});var o=[],u={};_.some(_d.LAYERS_CELLS.NUMBERS,function(E,t,n){for(var r=[],e=[t];e.length>0;){var S=e.pop();u[S]||(u[S]=S,_d.LAYERS_CELLS.MINES[S]!=C_BOMB&&0==_d.LAYERS_CELLS.NUMBERS[S]&&(r.push(S),e=_.union(e,l[S])))}r.length&&o.push(r)}),_d.OPEN_CELLS_RANGES=_.map(o,function(E){var t=_.flatten(_.map(E,function(_){return l[_]}));return _.filter(t,function(_){return!(_d.LAYERS_CELLS.MINES[_]==C_BOMB)})}),_.some(o,function(_,E){fill_layer(_d.LAYERS_CELLS.ZERO_AREAS,_,E)}),matrix2d_=_.template(matrix2d(_d.GxV_text,r)),render()}function click_gateway(E){if(_d.GAME_STATE==C_GAME_START){_d.LAYERS_CELLS.TOP_LAYER[E]=!0,_d.LAYERS_CELLS.MINES[E]==C_BOMB&&(_d.LAYERS_CELLS.MINES[E]=C_BOOMBOMB,_d.GAME_STATE=C_GAME_LOOSE);var t=_d.LAYERS_CELLS.ZERO_AREAS[E];t!=C_NO_OPEN_AREA&&fill_layer(_d.LAYERS_CELLS.TOP_LAYER,_d.OPEN_CELLS_RANGES[t],!0);var n=0;_.some(_d.LAYERS_CELLS.TOP_LAYER,function(_){_||n++}),n==_d.MINES_COUNT&&_d.GAME_STATE!=C_GAME_LOOSE&&(_d.GAME_STATE=C_GAME_WIN),_d.GAME_STATE!=C_GAME_START&&fill_layer(_d.LAYERS_CELLS.TOP_LAYER,_d.GxV_text,!0),_d.GAME_STATE==C_GAME_LOOSE&&(_d.GAME_STATE=parseInt(100*Math.random())%2?C_GAME_LOOSE:C_GAME_LOOSE1),render()}}
+</script>
+	
+</body>
+</html>
