@@ -1,0 +1,1100 @@
+<html>
+<head>
+
+<title>Const Cres Tetris = Tic Tac Toe + Tetris (c) WasterWentor 2025</title>
+<meta charset='utf-8'>
+<script type='text/javascript' src='lib/underscore.js'></script>
+<script type='text/javascript' src='lib/jquery-3.3.1.js'></script>
+<script type='text/javascript' src='lib/key_codes.js'></script>
+
+<style>
+.gametable
+{
+	border-collapse: collapse;
+}
+.cell
+{
+	width: 20px;
+	height: 20px;
+	border: 1px solid black;
+    text-align: center;
+    vertical-align: middle;
+}
+.debug
+{
+    background-color: pink;
+}
+
+</style>
+
+</head>
+<body onload=main()>
+<h2>Const Cres Tris (c) 2025</h2>
+Play Tic Tac Toe and Tetris together. 2000 scores to Win!
+<br>
+USE LEFT, RIGHT, UP, DOWN KEYS, AND MOUSE!
+<br>
+In Debug Mode you see some Math Sets game operations, but Mouse clicks not exact.
+<br><br>
+
+Trtis Width/Heigth (CX/CY)=  <input type=text id=CX size=5 maxlength=5><input type=text id=CY size=5 maxlength=5><br>
+Tic Tac Width/Heigth (CX/CY)=  <input type=text id=RECT_B_CX size=5 maxlength=5><input type=text id=RECT_B_CY size=5 maxlength=5><br>
+Screen Cell Width/Heigth (CX/CY)=  <input type=text id=SCR_CX size=5 maxlength=5><input type=text id=SCR_CY size=5 maxlength=5><br>
+<br>
+<button onclick=events_gateway2(_STRUCTS.EVENTS.EV_btn_start)>Start</button>
+<button onclick=events_gateway2(_STRUCTS.EVENTS.EV_btn_pause)>Pause</button>
+<button onclick=events_gateway2(_STRUCTS.EVENTS.EV_btn_debug)>Debug</button>
+<br>
+<br>
+	<div id=debug_state class="debug"></div>
+	<div id=game_state></div>
+	<div id=game_screen></div>
+<br>
+<script>
+
+ const GridCanvas = {
+	canvas: null,
+	ctx: null,
+	cols: 0,
+	rows: 0,
+	cell: 0,
+ };
+
+ /**
+  * Создаёт канвас x-by-y клеток и вставляет в body.
+  * @param {number} x - число клеток по горизонтали
+  * @param {number} y - число клеток по вертикали
+  * @param {number} CX - размер ячейки в пикселях
+  * @param {number} CY - размер ячейки в пикселях
+  * @returns {HTMLCanvasElement}
+  */
+ function Screen_Init(x, y, CX, CY)
+ {
+	var
+		game_screen = document.getElementById('game_screen')
+		canvas = document.getElementById('SCREEN')
+	;
+
+	if(!canvas)
+	{
+		canvas = document.createElement('canvas');
+		canvas.id = 'SCREEN';
+		game_screen.appendChild(canvas);
+	}
+
+	canvas.width = x * CX;
+	canvas.height = y * CY;
+	canvas.style.display = 'block';
+	canvas.style.maxWidth = '100%';
+	canvas.style.imageRendering = 'pixelated';
+
+	var ctx = canvas.getContext('2d');
+
+	GridCanvas.canvas = canvas;
+	GridCanvas.ctx = ctx;
+	GridCanvas.cols = x;
+	GridCanvas.rows = y;
+	GridCanvas.cellCX = CX;
+	GridCanvas.cellCY = CY;
+ }
+
+ /**
+  * Рисует изображение из URL в указанную ячейку (нумерация с 0).
+  * Масштабирует под размер ячейки без сохранения пропорций.
+  * @param {string} url
+  * @param {number} cellX
+  * @param {number} cellY
+  * @returns {Promise<void>}
+  */
+ function drawImageToCell(img, cellX, cellY)
+ {
+	const { ctx, cellCX, cellCY } = GridCanvas;
+	ctx.drawImage(img, cellX * cellCX, cellY * cellCY, cellCX, cellCY);
+ }
+
+ function drawRectToCell(color, cellX, cellY)
+ {
+	const { ctx, cellCX, cellCY } = GridCanvas;
+	// заполнить квадрат
+	ctx.fillStyle = color;
+	ctx.fillRect(cellX * cellCX, cellY * cellCY, cellCX, cellCY);
+
+	ctx.strokeStyle = 'black';
+	ctx.lineWidth = 2;
+	ctx.strokeRect(cellX * cellCX, cellY * cellCY, cellCX, cellCY);
+ }
+
+ async function loadImg(url) {
+
+	const img = new Image();
+	img.src = url;
+	await img.decode();
+
+	return img;
+ }
+
+ async function GEBUG_draw_set(math_set, timeout_ms, color)
+ {
+ 	DEBUG_RT.DEBUG_is_disable_interrupts		= true;
+
+ 	var tmp = _.flatten(math_set);
+	for(var i=0;i<LEN(tmp);i++)
+	{
+		if(!_.has(RT.RECTA_map_S_XxY, tmp[i])) continue;
+		drawRectToCell(color, RT.RECTA_map_S_XxY[tmp[i]][0], RT.RECTA_map_S_XxY[tmp[i]][1]);
+		await sleep_async(timeout_ms);
+	}
+ 	DEBUG_RT.DEBUG_is_disable_interrupts		= false;
+ }
+
+ async function GEBUG_draw_set2(math_set, str, timeout_ms, color)
+ {
+ 	if(!DEBUG_RT.DEBUG_is_on) return;
+
+	DEBUG_render(str);
+	await GEBUG_draw_set(math_set, timeout_ms, color);
+	render();
+ }
+
+//------------------------------------------
+// HELPERS
+//------------------------------------------
+function sleep_async(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+// ALSO BLOCK THE BROWSER RENDER
+function sleep_block(ms)
+{
+	ms += new Date().getTime();
+	while (new Date() < ms){}
+}
+
+function arr_fill(count, value) { return _.times(count, function(c) { return new_clone(value); }); }
+function LOG() { console.log.apply(console, arguments); }
+function LEN(x) { return x.length; }
+function MOD(x) { return LEN(x); }
+
+// https://github.com/jashkenas/underscore/issues/162#issuecomment-99285214
+var deepClone = function(obj)
+{
+	return (!obj || (typeof obj !== 'object'))?obj:
+		(_.isString(obj))?String.prototype.slice.call(obj):
+		(_.isDate(obj))?new Date(obj.valueOf()):
+		(_.isFunction(obj.clone))?obj.clone():
+		(_.isArray(obj)) ? _.map(obj, function(t){return _.deepClone(t)}):
+		_.mapObject(obj, function(val, key) {return _.deepClone(val)});
+};
+if(_ && !_.deepClone) _.deepClone = deepClone;
+
+var new_clone = deepClone;
+
+//------------------------------------------
+// COMBINATORICS
+//------------------------------------------
+// cartesianProduct([1, 2], [3, 4], ['a', 'b']);
+// [[1,3,"a"],[1,3,"b"],[1,4,"a"],[1,4,"b"],[2,3,"a"],[2,3,"b"],[2,4,"a"],[2,4,"b"]]
+function cartesianProduct()
+{
+	return _.reduce(arguments, function(a, b)
+	{
+		return _.flatten(_.map(a, function(x)
+		{
+			return _.map(b, function(y)
+			{
+				return x.concat([y]);
+			});
+		}), true);
+	}, [ [] ]);
+}
+//------------------------------------------
+
+//------------------------------------------
+// CONSTANTS
+//------------------------------------------
+
+var _STRUCTS =
+{
+	IMAGES :
+	{
+	},
+
+	STRINGS :
+	{
+		C_WAIT_START	: '<b>Try play to my game, amigos! Press Start to Play</b><br><img src="im/start.jpg" alt="">',
+		C_PAUSE			: '<b>Pause',
+		C_LOOSE			: '<b>Game Over, Looser!</b><br><img src="im/loose.jpg" alt="">',
+		C_WIN			: '<b>Congrat! You Win!</b><br><br><img src="im/win.jpg" alt="">',
+	},
+
+	SOUND_PATHS :
+	{
+		C_RECT_B_CLICK	: 'sfx/1up.wav',
+		C_RECT_B_LOOSE	: 'sfx/ouch.wav',
+		C_RECT_B_WIN	: 'sfx/fanfare.wav',
+		C_RECT_A_LOOSE	: 'sfx/ohno.wav',
+		C_RECT_A_WIN	: 'sfx/yippee.wav',
+		C_RECT_A_DROP	: 'sfx/potbreak.wav',
+		C_RECT_A_REMOVE_LINES	: 'sfx/tdorexpl.wav',
+		C_GAME_START	: 'sfx/letsgo.wav',
+	},
+
+	SOUND : {},
+
+	C_KEY_LEFT		: KeyCode.KEY_LEFT,
+	C_KEY_RIGHT		: KeyCode.KEY_RIGHT,
+	C_KEY_DROP		: KeyCode.KEY_DOWN,
+	C_KEY_DOWN		: KeyCode.KEY_UP,
+
+	EVENTS :
+	{
+		EV_click	: 0,
+		EV_key		: 1,
+		EV_btn_start: 2,
+		EV_btn_pause: 3,
+		EV_btn_debug: 4,
+
+		EV_timer	: 10,
+	},
+
+	RECTB_STATE :
+	{
+		win_pl		: 0,	// PLAY
+		win_no		: 1,	// NO WINNER
+		win_x		: 2,	// X WIN
+		win_o		: 3,	// O WIN
+	},
+
+	RECTB_MOVE_STATE :
+	{
+		move_ok			: 0,
+		move_border_lrd	: 1,
+		move_border_d	: 2,
+		move_border_lines		: 3,
+		move_logic_err	: 4,
+	},
+
+	GAME_STATE :
+	{
+		rectA_wait_start	: 0,
+		rectA_loop			: 1,
+		rectA_pause			: 2,
+		rectA_wait_loose	: 3,
+		rectA_wait_win		: 4,
+	},
+
+	cellCX	: 20,
+	cellCY	: 20,
+
+	GEOM_CELL_STATE :
+	{
+		0	: '#FFFFFF', // Белый: #FFFFFF     // пусто
+		1	: '#990000', // Красный: #FF0000   // X
+		2	: '#009900', // Зелёный: #00FF00   // O
+		3	: '#9999FF', // Синий: #0000FF     // квадрат для XO
+		4	: '#FF0000', // 					// зачеркнутый X
+		5	: '#00FF00', //						// зачеркнутый O
+	},
+
+	CELL_STATE :
+	{
+		b	: 0,	// BLANK
+		x	: 1,	// X
+		o	: 2,	// O
+		s	: 3,	// RECTB
+		xc	: 4,	// X LINE
+		oc	: 5,	// O LINE
+	},
+
+	// RUNTIME STRUCTURES STORAGE
+	RUNTIMES :
+	{
+		//------------------------------------------
+		// RUNTIME CONSTANTS
+		//------------------------------------------
+		RECTA_CX	:10, // ширина стакана
+		RECTA_CY	:20, // высота
+		RECTA_XxY	: [],
+
+		RECTA_S_XxY		: [],
+		RECTA_map_S_XxY	: {},
+
+		S_lines_XY	: [],
+		S_lines_YX	: [],
+		S_lines_diaL: [],
+		S_lines_diaR: [],
+
+		S_lines_ALL: [],
+
+		S_lines_D	: [], // BORDER DOWN LINE
+		S_lines_L	: [], // LAST RECT A LINE
+
+		RECTB_CX	: 3, // ширина квадрата
+		RECTB_CY	: 3, // высота
+		RECTB_XxY	: [],
+
+		SOUND		: {},
+		//------------------------------------------
+
+		//------------------------------------------
+		// RUNTIME VARS
+		//------------------------------------------
+		reactA_timer		: false,
+		rectA_timer_counter	: 0,
+		rectA_timer_speed	: 800,
+
+		rectA_state			: 0,
+		rectA_S_XY			: [],
+		rectA_STATE_GROUPS 	: {},
+		rectA_cell_state	: {},
+
+		rectB_state			: 0,
+		rectB_S_XY			: [],
+		rectB_STATE_GROUPS 	: {},
+		rectB_cell_state	: {},
+		rectB_S_XY_next		: [],
+
+		total_win		: 0,
+		total_loose		: 0,
+		total_nobody	: 0,
+		total_play		: 0,
+		total_scores	: 0,
+
+		score_rectB_win		: 100,
+		score_rectA_win		: 2000,
+		score_cell_win		: 20,
+
+		is_lock_events	: false,	// BROWSER HELL PROTECTION
+		//------------------------------------------
+	},
+
+	DEBUG_RUNTIMES :
+	{
+		DEBUG_is_on		: false,	// true | false
+		DEBUG_is_disable_interrupts	: false,
+		DEBUG_cell_color	: '#FFFF00',	// yellow
+	},
+
+};
+
+//------------------------------------------
+// ALIASES
+//------------------------------------------
+var
+	STR			= _STRUCTS.STRINGS,
+	SND			= _STRUCTS.SOUND,
+	IMG			= _STRUCTS.IMAGES,
+	CST			= _STRUCTS.CELL_STATE,
+	RBST		= _STRUCTS.RECTB_STATE,
+	GST			= _STRUCTS.GAME_STATE
+	EST			= _STRUCTS.EVENTS,
+	RMS			= _STRUCTS.RECTB_MOVE_STATE,
+	KEY			= _STRUCTS,
+	RT			= _STRUCTS.RUNTIMES,
+	DEBUG_RT	= _STRUCTS.DEBUG_RUNTIMES
+;
+//------------------------------------------
+
+function VEC_STR(set)				{ return set.join(","); }
+function map_set_2xN_string(set)	{ return _.map(set, function(v,k,l) { return VEC_STR(v); }); }
+function subset_XxY(set)			{ return _.map(set, function(v,k,l) { return RT.RECTA_map_S_XxY[v]; }); }
+
+function sound_play(sound_id)
+{
+	try { RT.SOUND[sound_id].play() }
+	catch(e) { LOG('ERR: SOUND PLAY ERR. ID = ' + sound_id); }
+}
+
+function STATE_MAP_state_assign(map_to, state, subset)
+{
+	_.each(subset, function(v,k,l) { map_to[v] = state; });
+}
+
+function STATE_MAP_state_copy(map_to, map_from, subset)
+{
+	_.each(subset, function(v,k,l) { map_to[v] = map_from[v]; });
+}
+
+async function init()
+{
+	var tmp;
+
+	//------------------------------------------
+	// INIT MATH SETS
+	//------------------------------------------
+	RT.RECTA_XxY		= cartesianProduct(_.range(0, RT.RECTA_CX, 1), _.range(0, RT.RECTA_CY, 1));
+    RT.RECTA_S_XxY		= map_set_2xN_string(RT.RECTA_XxY);
+	RT.RECTA_map_S_XxY	= _.object(RT.RECTA_S_XxY, RT.RECTA_XxY);
+
+	// RECT A LINES SETS
+	tmp					= cartesianProduct(_.range(0, RT.RECTA_CX, 1), _.range(0, RT.RECTA_CY, 1));
+    RT.S_lines_XY		= _.chunk(map_set_2xN_string(tmp), RT.RECTA_CY);
+	tmp					= cartesianProduct(_.range(0, RT.RECTA_CY, 1), _.range(0, RT.RECTA_CX, 1));
+    tmp					= _.map(tmp, function(v,k,l) { return [v[1], v[0]]; });
+    RT.S_lines_YX		= _.chunk(map_set_2xN_string(tmp), RT.RECTA_CX);
+
+	// RECT A BORDERS
+    RT.S_lines_D		= map_set_2xN_string(cartesianProduct(_.range(0, RT.RECTA_CX, 1), [RT.RECTA_CY]));
+
+	// RECT A LAST LINE
+    RT.S_lines_L		= map_set_2xN_string(cartesianProduct(_.range(0, RT.RECTA_CX, 1), [RT.RECTA_CY-1]));
+
+	// RECT A DIAGONALS
+    RT.S_lines_diaL		= _.reduce(RT.RECTA_XxY, function(acc,v)
+    {
+/*
+Переменная sum используется для идентификации и группировки клеток, принадлежащих диагонали.
+каждая диагональ в поле размером m×n характеризуется постоянной суммой индексов клеток, лежащих на этой диагонали.
+для всех клеток (x,y) на одной диагонали выполняется условие: x+y=const.
+Клетки с одинаковым значением sum=x+y принадлежат одной диагонали.
+Каждая уникальная сумма sum соответствует конкретной диагонали.
+*/
+    	var sum = v[0]+v[1];
+    	if(!acc[sum]) acc[sum] = [];
+    	acc[sum].push(VEC_STR(v));
+    	return acc;
+	}, []);
+
+    RT.S_lines_diaR		= _.reduce(RT.RECTA_XxY, function(acc,v)
+    {
+    	var sum = v[0]-v[1]-1+RT.RECTA_CY;
+
+    	if(!acc[sum]) acc[sum] = [];
+    	acc[sum].push(VEC_STR(v));
+    	return acc;
+	}, []);
+
+	RT.S_lines_ALL	=
+		[
+			RT.S_lines_XY,
+			RT.S_lines_YX,
+			RT.S_lines_diaL,
+			RT.S_lines_diaR
+		];
+
+	RT.RECTB_XxY		= cartesianProduct(_.range(0, RT.RECTB_CX, 1), _.range(0, RT.RECTB_CY, 1));
+	// MOVE RECTB TO CENTER OF FIELD
+    RT.RECTB_XxY		= _.map(new_clone(RT.RECTB_XxY), function(v,k,l) { return [Math.floor(v[0]+RT.RECTA_CX/2-RT.RECTB_CX/2), v[1]]; });
+    RT.RECTB_XxY		= map_set_2xN_string(RT.RECTB_XxY);
+	//------------------------------------------
+
+	// INIT RECT A CELLS STSTES
+	RT.rectA_cell_state	= _.object(RT.RECTA_S_XxY, arr_fill(MOD(RT.RECTA_S_XxY), CST.b));
+	rectA_calc_sets();
+
+	LOG(RT);
+
+	await GEBUG_draw_set2(RT.RECTA_S_XxY,	'DBG: RECT A CARTESIAN', 0, DEBUG_RT.DEBUG_cell_color);
+	await GEBUG_draw_set2(RT.S_lines_XY,	'DBG: LINES XY', 5, DEBUG_RT.DEBUG_cell_color);
+	await GEBUG_draw_set2(RT.S_lines_YX,	'DBG: LINES YX', 5, DEBUG_RT.DEBUG_cell_color);
+	await GEBUG_draw_set2(RT.S_lines_diaL,	'DBG: LINES DIAG L', 5, DEBUG_RT.DEBUG_cell_color);
+	await GEBUG_draw_set2(RT.S_lines_diaR,	'DBG: LINES DIAG R', 5, DEBUG_RT.DEBUG_cell_color);
+	await GEBUG_draw_set2(RT.RECTB_XxY,		'DBG: RECT B', 5, DEBUG_RT.DEBUG_cell_color);
+	await GEBUG_draw_set2(RT.S_lines_L,		'DBG: RECT A LAST LINE', 20, DEBUG_RT.DEBUG_cell_color);
+}
+
+function rectB_calc_sets()
+{
+	RT.rectB_S_XY			= _.keys(RT.rectB_cell_state);
+	RT.rectB_STATE_GROUPS	= rect_calc_sets(RT.rectB_S_XY, RT.rectB_cell_state);
+}
+
+function rectA_calc_sets()
+{
+	RT.rectA_S_XY			= _.keys(RT.rectA_cell_state);
+	RT.rectA_STATE_GROUPS	= rect_calc_sets(RT.rectA_S_XY, RT.rectA_cell_state);
+}
+
+function rectB_new()
+{
+	RT.rectB_state	= RBST.win_pl;
+	RT.rectB_cell_state		= _.object(RT.RECTB_XxY, arr_fill(MOD(RT.RECTB_XxY), CST.s));
+	rectB_calc_sets();
+}
+
+// CHECK IF RECT B MOVE OK
+function rectB_move_check(sx, sy)
+{
+	var
+		_r      	= RMS.move_logic_err,
+		rectB		= _.map(subset_XxY(RT.rectB_S_XY), function(v,k,l) { return [v[0]+sx, v[1]+sy]; })
+	;
+	rectB	= map_set_2xN_string(rectB);
+
+	RT.rectB_S_XY_next	= rectB;
+
+	switch(true)
+	{
+		// 1. DETECT LINES INTERSECTION
+		case (MOD(_.intersection(rectB, RT.rectA_STATE_GROUPS[CST.b])) < MOD(rectB)):
+			_r = RMS.move_border_lines;
+		break;
+
+		// 2. DETECT RECT A DOWN BORDER
+		case (MOD(_.intersection(rectB, RT.S_lines_D)) != 0):
+			_r = RMS.move_border_d;
+		break;
+
+		// 3. DETECT RECT A BORDERS
+		case (MOD(_.difference(rectB, RT.RECTA_S_XxY)) != 0):
+			_r = RMS.move_border_lrd;
+		break;
+
+		default :
+			_r = RMS.move_ok;
+		break;
+	}
+
+	return _r;
+}
+
+function rect_calc_sets(rect_S_XY, cell_map)
+{
+	var
+		groups_id		= _.values(CST),
+		STATE_GROUPS	= _.object(groups_id, arr_fill(LEN(groups_id), [])),
+		tmp				= _.groupBy(rect_S_XY, function(v,k,l) { return cell_map[v]; });
+
+    return _.extend(STATE_GROUPS, tmp);
+}
+
+// GET RANES WITH GEOMETRY LINES
+function state_ranges(S_XY_set, state, cell_map)
+{
+	var
+		_r		= [],
+		range	= []
+	;
+
+	_.each(S_XY_set, function(v,k,l)
+	{
+		if(cell_map[v] == state) range.push(v);
+		else if(LEN(range)) { _r.push(range); range = []; }
+	});
+
+	if(LEN(range)) _r.push(range);
+
+	return _r;
+}
+
+function state_ranges_set_set(S_XY_set_set, state, cell_map)
+{
+	return _.map(S_XY_set_set, function(v,k,l) { return state_ranges(v, state, cell_map); });
+}
+
+function line_remove_gaps(S_XY_set_set, state, cell_map)
+{
+	_.each(S_XY_set_set, function(v,k,l)
+	{
+		var
+			l	= 0,		// L BOUND
+			m	= 0,		// MID POINT (COPY FROM)
+			r	= LEN(v)	// R BOUND (COPY TO)
+		;
+
+		while(r > l)
+		{
+			while(--r > l) if(cell_map[v[r]] == state) break;
+			if(r <= l) break;	// NOTHING COPY
+			m = r;
+			while(--m >= l) if(cell_map[v[m]] != state) break;	// COPY FROM
+			if(m < l) break;	// NOTHING COPY
+			cell_map[v[r]]	= cell_map[v[m]];
+			cell_map[v[m]]	= state;
+		}
+	});
+}
+
+function update_score(rectB_state)
+{
+	switch(rectB_state)
+	{
+		case RBST.win_x:
+			RT.total_win++;
+			RT.total_play++;
+
+			RT.total_scores += RT.score_rectB_win;
+		break;
+
+		case RBST.win_o:
+			RT.total_loose++;
+			RT.total_play++;
+		break;
+
+		case RBST.win_no:
+			RT.total_nobody++;
+			RT.total_play++;
+		break;
+
+		case RBST.win_pl:
+		break;
+
+		default:
+			LOG('ERR: LOGIC ERROR');
+		break;
+	}
+
+	if(RT.total_scores >= RT.score_rectA_win)
+	{
+		RT.rectA_state	= GST.rectA_wait_win;
+		sound_play(SND.C_RECT_A_WIN);
+	}
+}
+
+/**
+EVENTS ENTRY
+*/
+async function events_gateway(id, event)
+{
+	switch(id)
+	{
+		case EST.EV_btn_start:
+		{
+			switch(RT.rectA_state)
+			{
+				case GST.rectA_wait_win:
+				case GST.rectA_wait_loose:
+				case GST.rectA_pause:
+					RT.rectA_state	= GST.rectA_wait_start;
+					render();
+				return;
+			}
+
+			RT.RECTA_CX = parseInt($('[id=CX]').val()),
+			RT.RECTA_CY = parseInt($('[id=CY]').val());
+
+			RT.RECTB_CX = parseInt($('[id=RECT_B_CX]').val()),
+			RT.RECTB_CY = parseInt($('[id=RECT_B_CY]').val());
+
+			_STRUCTS.cellCX = parseInt($('[id=SCR_CX]').val()),
+			_STRUCTS.cellCY = parseInt($('[id=SCR_CY]').val());
+
+			if(RT.RECTB_CX > RT.RECTA_CX)	RT.RECTA_CX	= RT.RECTB_CX*3;
+			if(RT.RECTB_CY > RT.RECTA_CY)	RT.RECTA_CY	= RT.RECTB_CY*3;
+
+			Screen_Init(RT.RECTA_CX, RT.RECTA_CY, _STRUCTS.cellCX, _STRUCTS.cellCY);
+			GridCanvas.canvas.addEventListener('click', canvasClick);
+
+			init();
+
+			rectB_new();
+
+			RT.rectA_timer_counter = 0;
+
+			RT.total_win		= 0,
+			RT.total_loose		= 0,
+			RT.total_nobody		= 0,
+			RT.total_play		= 0,
+			RT.total_scores		= 0,
+
+			RT.rectA_state	= GST.rectA_loop;
+
+			render();
+
+			sound_play(SND.C_GAME_START);
+		}
+		break;
+
+		case EST.EV_btn_debug:
+			DEBUG_RT.DEBUG_is_on			= !DEBUG_RT.DEBUG_is_on;
+			if(!DEBUG_RT.DEBUG_is_on)	DEBUG_render('');
+		break;
+
+		case EST.EV_btn_pause:
+
+			switch(RT.rectA_state)
+			{
+				case GST.rectA_loop:
+					RT.rectA_state	= GST.rectA_pause;
+				break;
+
+				case GST.rectA_pause:
+					RT.rectA_state	= GST.rectA_loop;
+				break;
+			}
+
+		break;
+
+		case EST.EV_key:
+		{
+			switch(RT.rectA_state)
+			{
+				case GST.rectA_loop:
+				break;
+
+				default:
+				return;
+			}
+
+			//------------------------------------------
+			// CHECK RECT B MOVE
+			//------------------------------------------
+			var move_st	= RMS.move_logic_err;
+			switch(event.key)
+			{
+				case KEY.C_KEY_LEFT:
+					move_st	= rectB_move_check(-1,0);
+				break;
+
+				case KEY.C_KEY_RIGHT:
+					move_st	= rectB_move_check(1,0);
+				break;
+
+				case KEY.C_KEY_DOWN:
+					move_st	= rectB_move_check(0,1);
+				break;
+
+				case KEY.C_KEY_DROP:
+					while(true)
+					{
+						move_st	= rectB_move_check(0,1);
+						if(move_st != RMS.move_ok) break;
+						await events_gateway(EST.EV_key, { key:KEY.C_KEY_DOWN });
+					}
+					event.key = KEY.C_KEY_DOWN;
+				break;
+
+				default:
+				return;
+			}
+			//------------------------------------------
+
+			await GEBUG_draw_set2(RT.rectB_S_XY_next, 'DBG: NEXT RECT B SET', 20, DEBUG_RT.DEBUG_cell_color);
+
+			switch(true)
+			{
+				// LINE BORDER CASE
+				case (event.key == KEY.C_KEY_DOWN) && (move_st == RMS.move_border_lines):
+				// DOWN BORDER CASE
+				case move_st == RMS.move_border_d:
+
+					sound_play(SND.C_RECT_A_DROP);
+
+					var
+						rectB_is_play		= (RT.rectB_state == RBST.win_pl),
+						rectB_is_win_x		= (RT.rectB_state == RBST.win_x)
+					;
+
+					await GEBUG_draw_set2(RT.rectB_S_XY, 	'DBG: MOVE CELLS RECT B->A', 10, DEBUG_RT.DEBUG_cell_color);
+
+					// NO ONE OPEN CELL
+					if(MOD(RT.rectB_STATE_GROUPS[CST.s]) == MOD(RT.rectB_S_XY))
+					{
+						STATE_MAP_state_assign(RT.rectB_cell_state, CST.o, RT.rectB_S_XY);
+					}
+
+					STATE_MAP_state_copy(RT.rectA_cell_state, RT.rectB_cell_state, RT.rectB_S_XY);
+					rectA_calc_sets();
+
+					rectB_new();
+					move_st = rectB_move_check(0,0);
+
+					if(move_st != RMS.move_ok)
+					{
+						RT.rectA_state	= GST.rectA_wait_loose;	// IS NEW RECT HAVE NO MOVES
+						sound_play(SND.C_RECT_A_LOOSE);
+					}
+					else
+					{
+						//------------------------------------------
+						// GET LINES FOR REMOVING
+						//------------------------------------------
+						var rem_lines = async function(state)
+						{
+							var
+								lxr			= state_ranges_set_set(RT.S_lines_XY, state, RT.rectA_cell_state),
+								lyr			= state_ranges_set_set(RT.S_lines_YX, state, RT.rectA_cell_state),
+								set_rm		= []
+							;
+
+							lxr		= _.flatten(lxr,1);
+							lyr		= _.flatten(lyr,1);
+
+							lxr		= _.filter(lxr, function(v,k,l) { return MOD(v) >= RT.RECTB_CX; });
+							lyr		= _.filter(lyr, function(v,k,l) { return MOD(v) >= RT.RECTB_CY; });
+
+							await GEBUG_draw_set2(lxr, 'DBG: CHECK X-LINES RANGES FOR REMOVE', 30, DEBUG_RT.DEBUG_cell_color);
+							await GEBUG_draw_set2(lyr, 'DBG: CHECK Y-LINES RANGES FOR REMOVE', 30, DEBUG_RT.DEBUG_cell_color);
+
+							set_rm	= _.flatten(lxr.concat(lyr));
+
+							return set_rm;
+						};
+						//------------------------------------------
+
+						// REMOVING CST.xc LINES
+						var set_xc = await rem_lines(CST.xc);
+						await GEBUG_draw_set2(set_xc, 'DBG: REMOVING', 30, DEBUG_RT.DEBUG_cell_color);
+						STATE_MAP_state_assign(RT.rectA_cell_state, CST.b, set_xc);
+
+						// REMOVING RECT B CST.s CELLS
+						await GEBUG_draw_set2(RT.rectA_STATE_GROUPS[CST.s], 'DBG: REMOVING', 30, DEBUG_RT.DEBUG_cell_color);
+						STATE_MAP_state_assign(RT.rectA_cell_state, CST.b, RT.rectA_STATE_GROUPS[CST.s]);
+
+						// REMOVING LAST LINE IF WIN
+						if(rectB_is_win_x)
+						{
+							await GEBUG_draw_set2(RT.S_lines_L, 'DBG: REMOVING', 30, DEBUG_RT.DEBUG_cell_color);
+							STATE_MAP_state_assign(RT.rectA_cell_state, CST.b, RT.S_lines_L);
+						}
+
+						if(MOD(set_xc)>0 || rectB_is_win_x) sound_play(SND.C_RECT_A_REMOVE_LINES);
+
+						// DROP DOWN CELLS
+						line_remove_gaps(RT.S_lines_XY, CST.b, RT.rectA_cell_state);
+
+						rectA_calc_sets();
+
+						// CHECK SCORE
+						RT.total_scores += MOD(set_xc)*RT.score_cell_win;	// ADD SCORE FOR REMOVED CELLS
+						update_score(rectB_is_play ? RBST.win_no:RBST.win_pl);
+					}
+
+				break;
+
+				// ALL OK. MOVING
+				case move_st == RMS.move_ok:
+					var states = _.map(RT.rectB_S_XY, function(v,k,l) { return RT.rectB_cell_state[v]; });
+					RT.rectB_cell_state	= _.object(RT.rectB_S_XY_next, states);
+					rectB_calc_sets();
+				break;
+			}
+		}
+		break;
+
+		case EST.EV_click:
+		{
+			switch(RT.rectA_state)
+			{
+				case GST.rectA_loop:
+				break;
+
+				default:
+				return;
+			}
+
+			//------------------------------------------
+			// GET RECTB LINES
+			//------------------------------------------
+			var intersect_rect = function(lines, rect_cells)
+			{
+				return _.map(lines, function(v1,k1,l1) { return _.map(v1, function(v,k,l) { return _.intersection(rect_cells, v); }) });
+			};
+			//------------------------------------------
+
+			var
+				S_XY			= VEC_STR(event.cell),
+				is_free_cell	= 1 == MOD(_.intersection([S_XY], RT.rectB_STATE_GROUPS[CST.s])),	// CLICK INSIDE FREE RECTB CELL
+				LINES_			= []
+			;
+
+			if((RT.rectB_state == RBST.win_pl) && is_free_cell)
+			{
+				// X MOVE
+				RT.rectB_cell_state[S_XY]		= CST.x;
+
+				rectB_calc_sets();
+
+				//------------------------------------------
+				// CHECK WINNER X
+				LINES_	= intersect_rect(RT.S_lines_ALL, RT.rectB_STATE_GROUPS[CST.x]);
+
+				await GEBUG_draw_set2(LINES_, 'DBG: FIGURE X INTERSECTION', 50, DEBUG_RT.DEBUG_cell_color);
+
+				_.each(LINES_, function(v1,k,l)
+				{
+					_.each(v1, function(v,k,l)
+					{
+						if(MOD(v) >= RT.RECTB_CX)
+						{
+							STATE_MAP_state_assign(RT.rectB_cell_state, CST.xc, v);
+							RT.rectB_state	= RBST.win_x;
+						}
+					});
+				});
+
+				rectB_calc_sets();
+
+				if((RT.rectB_state == RBST.win_pl) && (0 == MOD(RT.rectB_STATE_GROUPS[CST.s])))  { RT.rectB_state = RBST.win_no; }
+				//------------------------------------------
+
+				// O MOVE
+				if((RT.rectB_state == RBST.win_pl))
+				{
+					RT.rectB_STATE_GROUPS[CST.s]		= _.shuffle(RT.rectB_STATE_GROUPS[CST.s]);
+					RT.rectB_cell_state[RT.rectB_STATE_GROUPS[CST.s][0]]	= CST.o;
+
+					rectB_calc_sets();
+
+					//------------------------------------------
+					// CHECK WINNER O
+					LINES_	= intersect_rect(RT.S_lines_ALL, RT.rectB_STATE_GROUPS[CST.o]);
+
+					//await GEBUG_draw_set2(LINES_, 'DBG: FIGURE O INTERSECTION', 50, DEBUG_RT.DEBUG_cell_color);
+
+					_.each(LINES_, function(v1,k,l)
+					{
+						_.each(v1, function(v,k,l)
+						{
+							if(MOD(v) >= RT.RECTB_CX)
+							{
+								STATE_MAP_state_assign(RT.rectB_cell_state, CST.oc, v);
+								RT.rectB_state	= RBST.win_o;
+							}
+						});
+					});
+
+					rectB_calc_sets();
+
+					if((RT.rectB_state == RBST.win_pl) && (0 == MOD(RT.rectB_STATE_GROUPS[CST.s])))  { RT.rectB_state = RBST.win_no; }
+					//------------------------------------------
+
+				}
+
+				// NO WINNER
+				if((RT.rectB_state == RBST.win_pl)
+						&& (0 == MOD(RT.rectB_STATE_GROUPS[CST.s]))) RT.rectB_state = RBST.win_no;
+
+				switch(RT.rectB_state)
+				{
+					case RBST.win_x:
+						sound_play(SND.C_RECT_B_WIN);
+					break;
+
+					case RBST.win_o:
+						sound_play(SND.C_RECT_B_LOOSE);
+					break;
+
+					default:
+						sound_play(SND.C_RECT_B_CLICK);
+					return;
+				}
+
+				update_score(RT.rectB_state);
+			}
+		}
+		break;
+
+		case EST.EV_timer:
+			if(DEBUG_RT.DEBUG_is_disable_interrupts) return;
+
+			await events_gateway(EST.EV_key, { key:KEY.C_KEY_DOWN });
+			RT.rectA_timer_counter++;
+		break;
+
+		default:
+			LOG('ERR: LOGIC ERROR')
+		break;
+	}
+
+	render();
+}
+
+/**
+GO BY LAYERS PIE AND APPLY DATA FROM LAYERS TO EVERY CELL
+*/
+function render()
+{
+	var
+		GS		= $('[id=game_state]'),
+		SCR		= $('[id=game_screen]')
+	;
+
+	switch(RT.rectA_state)
+	{
+		case GST.rectA_wait_start:
+			GS.html(STR.C_WAIT_START);
+			SCR.html('');
+		return;
+
+		case GST.rectA_loop:
+			GS.html(
+				`Total: play/win/loose/nobody/scores = ${RT.total_play}/${RT.total_win}/${RT.total_loose}/${RT.total_nobody}/${RT.total_scores}`
+				+ `    Debug Mode = [${DEBUG_RT.DEBUG_is_on}]`
+			);
+		break;
+
+		case GST.rectA_pause:
+			GS.html(STR.C_PAUSE);
+		break;
+
+		case GST.rectA_wait_loose:
+			GS.html(STR.C_LOOSE);
+			SCR.html('');
+		break;
+
+		case GST.rectA_wait_win:
+			GS.html(STR.C_WIN);
+			SCR.html('');
+		break;
+
+		default:
+			LOG('ERR: LOGIC ERROR')
+		break;
+    }
+
+    _.each(RT.rectA_cell_state, function(v,k,l)
+    {
+		drawRectToCell(_STRUCTS.GEOM_CELL_STATE[v], RT.RECTA_map_S_XxY[k][0], RT.RECTA_map_S_XxY[k][1]);
+    });
+
+    _.each(RT.rectB_cell_state, function(v,k,l)
+    {
+		drawRectToCell(_STRUCTS.GEOM_CELL_STATE[v], RT.RECTA_map_S_XxY[k][0], RT.RECTA_map_S_XxY[k][1]);
+    });
+}
+
+function DEBUG_render(msg)
+{
+	var GS		= $('[id=debug_state]');
+	GS.html(msg);
+}
+
+async function main()
+{
+	$('[id=CX]').val(RT.RECTA_CX),
+	$('[id=CY]').val(RT.RECTA_CY);
+	$('[id=RECT_B_CX]').val(RT.RECTB_CX),
+	$('[id=RECT_B_CY]').val(RT.RECTB_CY);
+	$('[id=SCR_CX]').val(_STRUCTS.cellCX),
+	$('[id=SCR_CY]').val(_STRUCTS.cellCY);
+
+	RT.SOUND	= _.mapObject(_STRUCTS.SOUND_PATHS, function(v,k,l) { try {return new Audio(v)} catch(e) { LOG('ERR: LOAD SOUND ERROR. FILE = ' + v); return null; } });
+	_.extend(_STRUCTS.SOUND, _.object(_.keys(_STRUCTS.SOUND_PATHS), _.keys(_STRUCTS.SOUND_PATHS)));
+
+    RT.rectA_state	= GST.rectA_wait_start;
+
+	document.addEventListener('keydown', function(event) { events_gateway2(EST.EV_key, { event:event, key:event.keyCode }); } );
+
+	// clearInterval(RT.reactA_timer);
+	RT.reactA_timer	= setInterval(timer_func, RT.rectA_timer_speed);
+
+    DEBUG_render('');
+    render();
+}
+
+async function timer_func()
+{
+	if(!DEBUG_RT.DEBUG_stop && (RT.rectA_state == GST.rectA_loop)) await events_gateway2(EST.EV_timer);
+}
+
+async function events_gateway2()
+{
+	if(RT.is_lock_events) return;
+	RT.is_lock_events	= true;
+
+	await events_gateway.apply(null, arguments);
+
+	RT.is_lock_events	= false;
+}
+
+function canvasClick(event)
+{
+    LOG(event);
+	events_gateway2(EST.EV_click, {xy:[event.offsetX, event.offsetY], cell:[Math.trunc(event.offsetX / _STRUCTS.cellCX), Math.trunc(event.offsetY / _STRUCTS.cellCY)]});
+}
+
+
+</script>
+
+</body>
+</html>
+
