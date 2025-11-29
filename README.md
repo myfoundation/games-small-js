@@ -4,7 +4,7 @@ Almost pure JS Small Games set, created for fun and child teaching, included:
 Tetris  
 Minesweeper  
 Snake  
-
+Const Cres Tris - Tic Tac Toe and Tetris together
 
 ## Live Demo
 Play:  
